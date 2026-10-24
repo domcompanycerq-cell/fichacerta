@@ -13,8 +13,8 @@
     "test": "node --test test/*.test.js"
   },
   "dependencies": {
-    "express": "^4.21.2",
-    "nodemailer": "^6.9.16",
+    "express": "^4.22.3",
+    "nodemailer": "^10.2.1",
     "postgres": "^3.4.5"
   },
   "devDependencies": {

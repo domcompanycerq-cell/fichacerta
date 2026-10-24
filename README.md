@@ -7,7 +7,7 @@ App web (instalável no celular) para cozinhas: o usuário cadastra insumos (nom
 ## Funcionalidades
 
 **App do usuário** (`/`)
-- Cadastro com nome, DDD + telefone e e-mail. Login com e-mail e senha (sessão de 60 dias).
+- Cadastro com nome, DDD + telefone e e-mail. Login com e-mail e senha (sessão de 30 dias).
 - Insumos em tabela: preço editável direto na célula, importação por lista (`Arroz, 1kg, R$3,60`).
 - Fichas técnicas: quantidade, unidade (g, kg, ml, L, un, dz) e fator de correção. Mostra custo total, custo por porção, preço sugerido pelo CMV alvo e CMV praticado.
 - Mudou um preço: todas as fichas que usam o insumo são recalculadas, e o app mostra o antes e depois.
@@ -23,7 +23,7 @@ App web (instalável no celular) para cozinhas: o usuário cadastra insumos (nom
 | Fichas técnicas | até 2 | ilimitadas |
 | Histórico de preços | não | sim |
 
-Os limites valem no servidor. Se o Pro vence, a conta volta ao Free sem perder nada.
+Os limites valem no servidor. Se o Pro vence (ou o admin volta a conta ao Free), **nada é apagado**: ficam liberados os 10 insumos e as 2 fichas mais antigos, e o restante fica **bloqueado**. Itens bloqueados aparecem com um cadeado, não podem ser editados, excluídos nem usados em fichas novas, e o conteúdo das fichas bloqueadas fica oculto. Ao renovar o Pro, tudo é desbloqueado na hora.
 
 **Painel admin** (`/admin`)
 - Indicadores: usuários, assinantes, receita mensal, vencendo, vencidos, bloqueados, gráfico de cadastros.
@@ -143,6 +143,23 @@ Cada `git push` para a branch `main` publica uma nova versão automaticamente. P
 - **iPhone (Safari):** abra o link › botão Compartilhar › **Adicionar à Tela de Início**.
 
 O app abre em tela cheia com ícone próprio. Os dados ficam no servidor, então o usuário vê as mesmas informações no celular e no computador.
+
+## Segurança
+
+- Senhas guardadas com scrypt (nunca em texto). Login leva o mesmo tempo exista ou não o e-mail.
+- Sessão em cookie `__Host-sid` (HTTPS): `HttpOnly`, `Secure`, `SameSite=Lax`, válida por 30 dias. O token fica salvo no banco só como hash. Trocar a senha encerra as sessões nos outros aparelhos.
+- Escritas na API exigem o cabeçalho do próprio app e recusam pedidos vindos de outros sites (proteção contra CSRF).
+- Limite de tentativas de login e cadastro guardado no banco (vale para todas as instâncias da Vercel).
+- Cabeçalhos: Content-Security-Policy restrita, HSTS, X-Frame-Options, Permissions-Policy, Referrer-Policy.
+- Cada usuário só acessa os próprios dados (todas as consultas filtram pelo usuário logado). Consultas SQL sempre com parâmetros.
+- O lembrete diário só roda com o `CRON_SECRET`.
+
+## Cache
+
+- API (`/api/...`): `no-store`. Dados pessoais nunca ficam guardados no navegador, na CDN nem no service worker.
+- Páginas e código (`.html`, `.js`, `.css`): sempre revalidados, então cada deploy chega na hora.
+- Ícones: guardados por 7 dias.
+- Service worker: busca na rede primeiro e usa a cópia guardada só sem internet. Ao mudar a lista de arquivos do app, troque o número em `CACHE` no `public/sw.js`.
 
 ## E-mail (opcional)
 

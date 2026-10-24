@@ -15,13 +15,20 @@ app.disable("x-powered-by");
 app.set("trust proxy", 1);
 app.use(express.json({ limit: "300kb" }));
 
+// Cabeçalhos de segurança (os mesmos do vercel.json, para valer também no computador e nas respostas da API).
+const CSP = "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; manifest-src 'self'; worker-src 'self'; form-action 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'";
 app.use((req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("Referrer-Policy", "same-origin");
-  res.setHeader("Content-Security-Policy", "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; manifest-src 'self'; worker-src 'self'; frame-ancestors 'none'");
+  res.setHeader("Content-Security-Policy", CSP);
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=()");
+  res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+  if (req.secure) res.setHeader("Strict-Transport-Security", "max-age=63072000; includeSubDomains");
   next();
 });
+// Respostas da API têm dados pessoais: nunca guardar em cache (navegador, CDN ou service worker).
+app.use("/api", (req, res, next) => { res.setHeader("Cache-Control", "no-store"); res.setHeader("Vary", "Cookie"); next(); });
 
 /* ---------------- utilidades ---------------- */
 const erro = (res, status, msg, code) => res.status(status).json({ erro: msg, code });
@@ -53,21 +60,32 @@ app.get("/api/health", h(async (req, res) => { await ready(); await get("SELECT 
 
 app.use("/api", h(async (req, res, next) => { await iniciar(); next(); }));
 // Proteção CSRF: toda escrita na API precisa do cabeçalho enviado pelo nosso front (o cron é GET).
+// Também recusa escritas vindas de outro site (cabeçalho Origin diferente do próprio app).
 app.use("/api", (req, res, next) => {
   if (req.method === "GET" || req.method === "HEAD") return next();
   if (req.get("X-Requested-With") !== "fetch") return erro(res, 403, "Requisição inválida.");
+  const origem = req.get("origin");
+  if (origem) {
+    let host = "";
+    try { host = new URL(origem).host; } catch (e) { /* origem inválida */ }
+    if (host !== req.get("host")) return erro(res, 403, "Requisição inválida.");
+  }
   next();
 });
 app.use("/api", auth.carregarUsuario);
 
 async function userOut(u) {
   const { n } = await get("SELECT COUNT(*)::int AS n FROM notificacoes WHERE user_id = $1 AND lida = FALSE", u.id);
+  const b = await planos.bloqueados(u);
   return {
     id: u.id, nome: u.nome, email: u.email, telefone: u.telefone, role: u.role,
     criadoEm: u.criado_em, ...planos.resumoPlano(u), uso: await planos.uso(u.id), naoLidas: n,
+    bloqueados: { insumos: b.insumos.size, receitas: b.receitas.size },
   };
 }
-const insumoOut = (r) => ({ id: r.id, nome: r.nome, qtd: r.qtd, unidade: r.unidade, preco: r.preco, criadoEm: r.criado_em, atualizadoEm: r.atualizado_em });
+const MSG_BLOQ_INSUMO = "Este insumo está bloqueado: sua conta está no plano Free, que permite até 10 insumos. Nada foi apagado. Renove o Pro para desbloquear.";
+const MSG_BLOQ_FICHA = "Esta ficha está bloqueada: sua conta está no plano Free, que permite até 2 fichas técnicas. Nada foi apagado. Renove o Pro para desbloquear.";
+const insumoOut = (r, bloq) => ({ id: r.id, nome: r.nome, qtd: r.qtd, unidade: r.unidade, preco: r.preco, criadoEm: r.criado_em, atualizadoEm: r.atualizado_em, bloqueado: !!(bloq && bloq.insumos.has(r.id)) });
 const receitaOut = (r) => ({
   id: r.id, nome: r.nome, categoria: r.categoria, rendimento: r.rendimento, unidadeRend: r.unidade_rend,
   cmvAlvo: r.cmv_alvo, precoVenda: r.preco_venda, preparo: r.preparo, itens: JSON.parse(r.itens_json || "[]"),
@@ -117,9 +135,11 @@ app.post("/api/auth/cadastro", h(async (req, res) => {
 
 app.post("/api/auth/login", h(async (req, res) => {
   const email = txt(req.body.email, 160).toLowerCase(), senha = String(req.body.senha || "");
-  if (await auth.limitarTentativas(`login:${req.ip}:${email}`)) return erro(res, 429, "Muitas tentativas. Aguarde 15 minutos e tente de novo.");
+  if (await auth.limitarTentativas(`login:${req.ip}:${email}`) || await auth.limitarTentativas(`login-ip:${req.ip}`, 40))
+    return erro(res, 429, "Muitas tentativas. Aguarde 15 minutos e tente de novo.");
   const u = await get("SELECT * FROM users WHERE email = $1", email);
-  if (!u || !(await auth.conferirSenha(senha, u.senha_hash))) return erro(res, 401, "E-mail ou senha incorretos.");
+  const senhaOk = await auth.conferirSenha(senha, u && u.senha_hash); // roda mesmo sem usuário, para o tempo ser igual
+  if (!u || !senhaOk) return erro(res, 401, "E-mail ou senha incorretos.");
   if (u.status === "bloqueado") return erro(res, 403, auth.msgBloqueio(u), "bloqueado");
   await run("UPDATE users SET ultimo_acesso = $1 WHERE id = $2", now(), u.id);
   await auth.criarSessao(req, res, u.id);
@@ -180,7 +200,12 @@ app.put("/api/me/senha", auth.exigirLogin, h(async (req, res) => {
   if (!(await auth.conferirSenha(String(req.body.atual || ""), req.user.senha_hash))) return erro(res, 400, "A senha atual não confere.");
   const nova = String(req.body.nova || "");
   if (nova.length < 8) return erro(res, 400, "A nova senha precisa ter pelo menos 8 caracteres.");
-  await run("UPDATE users SET senha_hash = $1 WHERE id = $2", await auth.hashSenha(nova), req.user.id);
+  const hash = await auth.hashSenha(nova);
+  await tx(async (d) => {
+    await d.run("UPDATE users SET senha_hash = $1 WHERE id = $2", hash, req.user.id);
+    // Encerra as sessões em outros aparelhos; mantém só a atual.
+    await d.run("DELETE FROM sessions WHERE user_id = $1 AND token_hash <> $2", req.user.id, req.sessaoHash || "");
+  });
   res.json({ ok: true });
 }));
 
@@ -208,7 +233,8 @@ const nomeExiste = (userId, nome, excetoId = 0) =>
   get("SELECT id FROM insumos WHERE user_id = $1 AND lower(nome) = lower($2) AND id <> $3", userId, nome, excetoId);
 
 app.get("/api/insumos", auth.exigirLogin, h(async (req, res) => {
-  res.json({ insumos: (await all("SELECT * FROM insumos WHERE user_id = $1 ORDER BY lower(nome)", req.user.id)).map(insumoOut) });
+  const bloq = await planos.bloqueados(req.user);
+  res.json({ insumos: (await all("SELECT * FROM insumos WHERE user_id = $1 ORDER BY lower(nome)", req.user.id)).map((r) => insumoOut(r, bloq)) });
 }));
 
 app.post("/api/insumos", auth.exigirLogin, h(async (req, res) => {
@@ -224,6 +250,7 @@ app.post("/api/insumos", auth.exigirLogin, h(async (req, res) => {
 async function atualizarInsumo(user, id, v) {
   const prev = await get("SELECT * FROM insumos WHERE id = $1 AND user_id = $2", id, user.id);
   if (!prev) return { status: 404, erro: "Insumo não encontrado." };
+  if ((await planos.bloqueados(user)).insumos.has(id)) return { status: 402, erro: MSG_BLOQ_INSUMO, code: "item_bloqueado" };
   if (await nomeExiste(user.id, v.nome, id)) return { status: 409, erro: `Já existe um insumo chamado “${v.nome}”.` };
   const usadas = await receitasQueUsam(user.id, id);
   if (usadas.length && Calc.UN[v.unidade].fam !== Calc.UN[prev.unidade].fam)
@@ -249,13 +276,14 @@ app.put("/api/insumos/:id", auth.exigirLogin, h(async (req, res) => {
   const v = validarInsumo(req.body);
   if (v.erro) return erro(res, 400, v.erro);
   const r = await atualizarInsumo(req.user, Number(req.params.id) || 0, v);
-  if (r.erro) return erro(res, r.status, r.erro);
+  if (r.erro) return erro(res, r.status, r.erro, r.code);
   res.json(r);
 }));
 
 app.delete("/api/insumos/:id", auth.exigirLogin, h(async (req, res) => {
   const id = Number(req.params.id) || 0;
   if (!(await get("SELECT 1 FROM insumos WHERE id = $1 AND user_id = $2", id, req.user.id))) return erro(res, 404, "Insumo não encontrado.");
+  if ((await planos.bloqueados(req.user)).insumos.has(id)) return erro(res, 402, MSG_BLOQ_INSUMO, "item_bloqueado");
   const usadas = await receitasQueUsam(req.user.id, id);
   if (usadas.length) return erro(res, 409, `Não dá para excluir: usado em ${usadas.map((r) => r.nome).join(", ")}. Remova-o dessas fichas antes.`);
   await run("DELETE FROM insumos WHERE id = $1 AND user_id = $2", id, req.user.id);
@@ -275,7 +303,7 @@ app.post("/api/insumos/importar", auth.exigirLogin, h(async (req, res) => {
     const ex = await nomeExiste(req.user.id, v.nome);
     if (ex) {
       const r = await atualizarInsumo(req.user, ex.id, v);
-      if (r.erro) out.rejeitadas.push(`${bruto} (${r.erro})`); else out.atualizados++;
+      if (r.erro) out.rejeitadas.push(`${bruto} (${r.code === "item_bloqueado" ? "bloqueado no plano Free" : r.erro})`); else out.atualizados++;
       continue;
     }
     if (await checarLimite(req.user, "insumos")) { out.limite = true; out.rejeitadas.push(bruto); continue; }
@@ -300,7 +328,7 @@ app.get("/api/historico", auth.exigirLogin, exigirPro, h(async (req, res) => {
 }));
 
 /* ---------------- receitas ---------------- */
-async function validarReceita(user, body) {
+async function validarReceita(user, body, itensAtuais = []) {
   const nome = txt(body.nome, 140);
   const rendimento = Calc.parseNum(body.rendimento), cmvAlvo = Calc.parseNum(body.cmvAlvo);
   const precoVenda = Calc.parseNum(body.precoVenda) || 0;
@@ -308,12 +336,15 @@ async function validarReceita(user, body) {
   if (!(rendimento > 0)) return { erro: "O rendimento precisa ser maior que zero." };
   if (!(cmvAlvo > 0 && cmvAlvo < 100)) return { erro: "O CMV alvo deve ficar entre 1% e 99%." };
   const ins = await mapaInsumos(user.id);
+  const bloq = await planos.bloqueados(user);
+  const jaNaFicha = new Set(itensAtuais.map((l) => l.insumoId));
   const itens = [];
   for (const l of Array.isArray(body.itens) ? body.itens.slice(0, 200) : []) {
     const insumoId = Number(l.insumoId), qtd = Calc.parseNum(l.qtd), fc = Calc.parseNum(l.fc) || 1;
     if (!insumoId) continue;
     const i = ins[insumoId];
     if (!i) return { erro: "Um dos insumos da ficha não existe mais." };
+    if (bloq.insumos.has(insumoId) && !jaNaFicha.has(insumoId)) return { erro: `${i.nome} está bloqueado no plano Free e não pode ser adicionado a fichas. Renove o Pro para usar.` };
     if (!(qtd > 0)) return { erro: `Informe a quantidade de ${i.nome}.` };
     if (!Calc.UN[l.unidade] || Calc.UN[l.unidade].fam !== Calc.UN[i.unidade].fam) return { erro: `${i.nome}: unidade incompatível com a embalagem (${i.unidade}).` };
     if (!(fc >= 1 && fc <= 20)) return { erro: `${i.nome}: o fator de correção deve ficar entre 1 e 20.` };
@@ -327,11 +358,15 @@ async function validarReceita(user, body) {
 }
 
 app.get("/api/receitas", auth.exigirLogin, h(async (req, res) => {
-  res.json({ receitas: (await all("SELECT * FROM receitas WHERE user_id = $1 ORDER BY lower(nome)", req.user.id)).map(receitaOut) });
+  const bloq = await planos.bloqueados(req.user);
+  // Fichas bloqueadas aparecem só com nome e categoria; o conteúdo fica guardado e volta ao renovar.
+  res.json({ receitas: (await all("SELECT * FROM receitas WHERE user_id = $1 ORDER BY lower(nome)", req.user.id)).map((r) =>
+    bloq.receitas.has(r.id) ? { id: r.id, nome: r.nome, categoria: r.categoria, unidadeRend: r.unidade_rend, itens: [], bloqueado: true } : { ...receitaOut(r), bloqueado: false }) });
 }));
 app.get("/api/receitas/:id", auth.exigirLogin, h(async (req, res) => {
   const r = await get("SELECT * FROM receitas WHERE id = $1 AND user_id = $2", Number(req.params.id) || 0, req.user.id);
   if (!r) return erro(res, 404, "Ficha não encontrada.");
+  if ((await planos.bloqueados(req.user)).receitas.has(r.id)) return erro(res, 402, MSG_BLOQ_FICHA, "item_bloqueado");
   res.json({ receita: receitaOut(r) });
 }));
 app.post("/api/receitas", auth.exigirLogin, h(async (req, res) => {
@@ -346,8 +381,10 @@ app.post("/api/receitas", auth.exigirLogin, h(async (req, res) => {
 }));
 app.put("/api/receitas/:id", auth.exigirLogin, h(async (req, res) => {
   const id = Number(req.params.id) || 0;
-  if (!(await get("SELECT 1 FROM receitas WHERE id = $1 AND user_id = $2", id, req.user.id))) return erro(res, 404, "Ficha não encontrada.");
-  const v = await validarReceita(req.user, req.body);
+  const atual = await get("SELECT * FROM receitas WHERE id = $1 AND user_id = $2", id, req.user.id);
+  if (!atual) return erro(res, 404, "Ficha não encontrada.");
+  if ((await planos.bloqueados(req.user)).receitas.has(id)) return erro(res, 402, MSG_BLOQ_FICHA, "item_bloqueado");
+  const v = await validarReceita(req.user, req.body, receitaOut(atual).itens);
   if (v.erro) return erro(res, 400, v.erro);
   const r = await get(`UPDATE receitas SET nome=$1, categoria=$2, rendimento=$3, unidade_rend=$4, cmv_alvo=$5, preco_venda=$6, preparo=$7, itens_json=$8, atualizado_em=$9
     WHERE id=$10 AND user_id=$11 RETURNING *`,
@@ -355,6 +392,7 @@ app.put("/api/receitas/:id", auth.exigirLogin, h(async (req, res) => {
   res.json({ receita: receitaOut(r) });
 }));
 app.delete("/api/receitas/:id", auth.exigirLogin, h(async (req, res) => {
+  if ((await planos.bloqueados(req.user)).receitas.has(Number(req.params.id) || 0)) return erro(res, 402, MSG_BLOQ_FICHA, "item_bloqueado");
   const r = await run("DELETE FROM receitas WHERE id = $1 AND user_id = $2", Number(req.params.id) || 0, req.user.id);
   if (!r.count) return erro(res, 404, "Ficha não encontrada.");
   res.json({ ok: true });
@@ -563,7 +601,15 @@ app.use("/api", (req, res) => erro(res, 404, "Rota não encontrada."));
 
 /* ---------------- páginas (no computador; na Vercel a pasta public/ é servida pela CDN) ---------------- */
 const PUBLIC = path.join(__dirname, "public");
-app.use(express.static(PUBLIC, { extensions: ["html"] }));
+app.use(express.static(PUBLIC, {
+  extensions: ["html"],
+  // Mesmas regras de cache do vercel.json: páginas e código sempre revalidados, ícones guardados por 1 semana.
+  setHeaders: (res, arquivo) => {
+    if (arquivo.includes(`${path.sep}icons${path.sep}`)) res.setHeader("Cache-Control", "public, max-age=604800");
+    else if (/\.html$|sw\.js$/.test(arquivo)) res.setHeader("Cache-Control", "no-cache");
+    else res.setHeader("Cache-Control", "public, max-age=0, must-revalidate");
+  },
+}));
 const pagina = (arquivo) => (req, res) => res.sendFile(path.join(PUBLIC, arquivo), (e) => { if (e && !res.headersSent) erro(res, 404, "Página não encontrada."); });
 app.get("/admin", pagina("admin.html"));
 app.get("*", pagina("index.html"));

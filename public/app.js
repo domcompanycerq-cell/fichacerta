@@ -55,7 +55,7 @@
   function tratarErro(e, alvoErro) {
     if (e.status === 401) { renderAuth("login", null, "Sua sessão terminou. Entre de novo."); return; }
     if (e.code === "bloqueado") { renderAuth("login", null, e.message); return; }
-    if (e.code === "limite") { upsell(e.message); return; }
+    if (e.code === "limite" || e.code === "item_bloqueado") { upsell(e.message); return; }
     if (alvoErro) alvoErro.textContent = e.message; else toast(esc(e.message));
   }
 
@@ -219,13 +219,24 @@
     $("#mg", m.root).addEventListener("click", m.close);
   }
 
+  // Itens além do limite do Free (ex.: Pro vencido) ficam bloqueados, nunca apagados.
+  const MSG_INS_BLOQ = "Este insumo está bloqueado porque sua conta está no plano Free (até 10 insumos). Nada foi apagado: renove o Pro para desbloquear.";
+  const MSG_FICHA_BLOQ = "Esta ficha está bloqueada porque sua conta está no plano Free (até 2 fichas). Nada foi apagado: renove o Pro para desbloquear.";
+  function avisoBloqueio() {
+    const b = S.me.bloqueados || { insumos: 0, receitas: 0 };
+    if (!b.insumos && !b.receitas) return "";
+    const partes = [b.insumos ? `${b.insumos} insumo${b.insumos > 1 ? "s" : ""}` : "", b.receitas ? `${b.receitas} ficha${b.receitas > 1 ? "s" : ""}` : ""].filter(Boolean).join(" e ");
+    return `<div class="callout red">${icon("lock")}<div class="ct"><b>${partes} bloqueado${b.insumos + b.receitas > 1 ? "s" : ""}.</b> Sua conta está no plano Free e eles passam do limite. Nada foi apagado: ficam guardados e voltam assim que você renovar o Pro.
+      <div style="margin-top:8px"><a class="btn primary" href="${linkSuporte("renovar")}" target="_blank" rel="noopener">Renovar pelo WhatsApp</a></div></div></div>`;
+  }
+
   /* ================= insumos ================= */
   function viewInsumos() {
     crumb("Insumos");
     const lim = S.me.limites.insumos, cheio = lim != null && S.insumos.length >= lim;
     $("#view").innerHTML = `<div class="page wide">
       ${pageHead("box", "Insumos", "Tudo o que você compra, com a embalagem e o preço pago. Mude o preço direto na tabela: as fichas técnicas que usam o item são recalculadas na hora.")}
-      ${cheio ? `<div class="callout yellow">${icon("info")}<div class="ct">Você chegou ao limite de ${lim} insumos do plano Free. <a href="#plano">Assine o Pro</a> para cadastrar sem limite.</div></div>` : ""}
+      ${avisoBloqueio() || (cheio ? `<div class="callout yellow">${icon("info")}<div class="ct">Você chegou ao limite de ${lim} insumos do plano Free. <a href="#plano">Assine o Pro</a> para cadastrar sem limite.</div></div>` : "")}
       <div class="db-toolbar">
         <span class="view">${icon("table")}Tabela</span><span class="spacer"></span>
         <input class="search" id="q" type="search" placeholder="Buscar…" value="${esc(S.q)}" aria-label="Buscar insumo">
@@ -251,6 +262,13 @@
     if (!list.length) { tb.innerHTML = `<tr><td colspan="6"><div class="empty">Nada encontrado para “${esc(S.q)}”.</div></td></tr>`; return; }
     tb.innerHTML = list.map((i) => {
       const fam = C.UN[i.unidade].fam, n = usadoEm(i.id).length;
+      if (i.bloqueado) return `<tr class="click locked" data-id="${i.id}" title="Bloqueado no plano Free">
+        <td><span class="title-cell">${icon("lock")}${esc(i.nome)} <span class="tag red">Bloqueado</span></span></td>
+        <td class="r num">${fmt(i.qtd, 3)} ${esc(i.unidade)}</td>
+        <td class="r num">${p2(i.preco)}</td>
+        <td class="r num muted">${brl(C.pricePerDisplayUnit(i))}/${C.BASE_LABEL[fam]}</td>
+        <td>${n ? `<span class="tag">${n} ficha${n > 1 ? "s" : ""}</span>` : `<span class="faint">—</span>`}</td>
+        <td class="muted small num">${dataBR(i.atualizadoEm)}</td></tr>`;
       return `<tr class="click" data-id="${i.id}">
         <td><span class="title-cell">${icon("doc")}${esc(i.nome)}</span></td>
         <td class="r num">${fmt(i.qtd, 3)} ${esc(i.unidade)}</td>
@@ -288,6 +306,7 @@
   const singular = (u) => String(u || "porção").replace(/ões$/, "ão").replace(/s$/, "");
 
   function peekInsumo(id) {
+    if (id && S.insMap[id] && S.insMap[id].bloqueado) return upsell(MSG_INS_BLOQ);
     const i = id ? S.insMap[id] : { nome: "", qtd: 1, unidade: "kg", preco: "" };
     const usadas = id ? usadoEm(id) : [];
     const p = overlay(`<div class="peek" role="dialog" aria-modal="true">
@@ -388,12 +407,18 @@
     const list = S.receitas.filter((r) => !q || norm(r.nome).includes(q) || norm(r.categoria).includes(q));
     $("#view").innerHTML = `<div class="page wide">
       ${pageHead("book", "Fichas técnicas", "Cada ficha usa os preços atuais dos seus insumos. Quando um preço muda, o custo e o preço sugerido se atualizam sozinhos.")}
-      ${cheio ? `<div class="callout yellow">${icon("info")}<div class="ct">Você está usando ${S.receitas.length} de ${lim} fichas do plano Free. <a href="#plano">Assine o Pro</a> para criar sem limite.</div></div>` : ""}
+      ${avisoBloqueio()}${!avisoBloqueio() && cheio ? `<div class="callout yellow">${icon("info")}<div class="ct">Você está usando ${S.receitas.length} de ${lim} fichas do plano Free. <a href="#plano">Assine o Pro</a> para criar sem limite.</div></div>` : ""}
       <div class="db-toolbar"><span class="view">${icon("grid")}Galeria</span><span class="spacer"></span>
         <input class="search" id="q" type="search" placeholder="Buscar…" value="${esc(S.qRec)}" aria-label="Buscar ficha">
         <button class="btn primary" id="nova">${icon("plus")}Nova</button></div>
       <div class="gallery">
         ${list.map((r) => {
+          if (r.bloqueado) return `<button class="gcard locked" data-bloq="1" data-id="${r.id}">
+            <div class="cover"><span>${icon("lock").replace("<svg", '<svg style="width:26px;height:26px"')}</span></div>
+            <div class="body"><div class="t">${esc(r.nome)}</div>
+              <div class="row" style="gap:4px">${r.categoria ? `<span class="tag">${esc(r.categoria)}</span>` : ""}<span class="tag red">Bloqueada</span></div>
+              <div class="prop"><span>Guardada, volta ao renovar o Pro</span></div>
+            </div></button>`;
           const c = C.calcRecipe(r, S.insMap);
           const over = c.venda > 0 && c.cmvReal > r.cmvAlvo / 100;
           return `<button class="gcard" data-id="${r.id}">
@@ -413,7 +438,7 @@
       location.hash = "#ficha/nova";
     };
     $("#nova").onclick = nova; $("#novaCard").onclick = nova;
-    $$(".gcard[data-id]").forEach((b) => b.addEventListener("click", () => { location.hash = `#ficha/${b.dataset.id}`; }));
+    $$(".gcard[data-id]").forEach((b) => b.addEventListener("click", () => { if (b.dataset.bloq) upsell(MSG_FICHA_BLOQ); else location.hash = `#ficha/${b.dataset.id}`; }));
     $("#q").addEventListener("input", (e) => { S.qRec = e.target.value; const pos = e.target.selectionStart; viewFichas(); const n = $("#q"); n.focus(); n.setSelectionRange(pos, pos); });
   }
 
@@ -421,11 +446,17 @@
     const id = arg === "nova" ? null : Number(arg);
     const orig = id ? S.receitas.find((r) => r.id === id) : null;
     if (id && !orig) { location.hash = "#fichas"; return; }
+    if (orig && orig.bloqueado) { location.hash = "#fichas"; upsell(MSG_FICHA_BLOQ); return; }
     if (!S.insumos.length) { location.hash = "#insumos"; return; }
     const r = orig ? JSON.parse(JSON.stringify(orig)) : { nome: "", categoria: "", rendimento: 1, unidadeRend: "porções", cmvAlvo: 30, precoVenda: 0, preparo: "", itens: [] };
     crumb(`Fichas técnicas / ${r.nome || "Nova ficha"}`);
     S.dirty = false;
-    const insOpts = (sel) => `<option value="">Escolha…</option>` + S.insumos.map((i) => `<option value="${i.id}" ${i.id === sel ? "selected" : ""}>${esc(i.nome)}</option>`).join("");
+    // Insumos bloqueados não podem entrar em fichas novas (os que já estavam na ficha continuam).
+    const jaNaFicha = new Set((orig ? orig.itens : []).map((l) => l.insumoId));
+    const insOpts = (sel) => `<option value="">Escolha…</option>` + S.insumos.map((i) => {
+      const off = i.bloqueado && !jaNaFicha.has(i.id);
+      return `<option value="${i.id}" ${i.id === sel ? "selected" : ""} ${off ? "disabled" : ""}>${esc(i.nome)}${i.bloqueado ? " (bloqueado)" : ""}</option>`;
+    }).join("");
     const unitOpts = (fam, sel) => C.FAM_UNITS[fam].map((u) => `<option ${u === sel ? "selected" : ""}>${u}</option>`).join("");
     $("#topActions").innerHTML = `<span class="small faint" id="saveState"></span>${id ? `<button class="btn ghost danger" id="del">Excluir</button>` : ""}<button class="btn primary" id="save">Salvar</button>`;
     $("#view").innerHTML = `<div class="page">

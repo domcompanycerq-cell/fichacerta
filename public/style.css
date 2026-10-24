@@ -287,3 +287,10 @@ table.db .title-cell svg { width: 16px; height: 16px; color: var(--text-3); flex
 
 @media (prefers-reduced-motion: reduce) { .sidebar { transition: none; } .cell-input.saved { animation: none; } }
 .row .input.grow { width: auto; }
+
+/* itens bloqueados no plano Free */
+table.db tr.locked td { color: var(--text-3); }
+table.db tr.locked .title-cell svg { color: var(--red); }
+.gcard.locked { opacity: .75; }
+.gcard.locked .cover { justify-content: center; align-items: center; }
+.gcard.locked .cover span { transform: none; color: var(--text-3); }

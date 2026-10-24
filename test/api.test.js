@@ -22,18 +22,22 @@ before(async () => {
 after(async () => { server.close(); await fechar(); });
 
 // Cliente com cookie de sessão próprio.
+let ipSeq = 1;
 function cliente() {
   let cookie = "";
-  return async (method, url, body, extra = {}) => {
+  const ip = `10.0.0.${ipSeq++}`; // cada cliente simula uma rede diferente (o limite de cadastros é por IP)
+  const fn = async (method, url, body, extra = {}) => {
     const r = await fetch(base + url, {
       method,
-      headers: { "Content-Type": "application/json", "X-Requested-With": "fetch", ...(cookie ? { Cookie: cookie } : {}), ...extra },
+      headers: { "Content-Type": "application/json", "X-Requested-With": "fetch", "X-Forwarded-For": ip, ...(cookie ? { Cookie: cookie } : {}), ...extra },
       body: body ? JSON.stringify(body) : undefined,
     });
     const sc = r.headers.get("set-cookie");
     if (sc) cookie = sc.split(";")[0];
-    return { status: r.status, body: await r.json().catch(() => ({})) };
+    return { status: r.status, headers: r.headers, body: await r.json().catch(() => ({})) };
   };
+  fn.cookie = () => cookie;
+  return fn;
 }
 const novoUsuario = async (email) => {
   const c = cliente();
@@ -191,4 +195,67 @@ test("cron diário exige o segredo e envia lembretes", async () => {
   assert.equal((await ok.json()).ok, true);
   const hc = await fetch(base + "/api/health");
   assert.equal(hc.status, 200);
+});
+
+test("Pro vencido: itens além do Free ficam bloqueados, nunca apagados", async () => {
+  const { c, id } = await novoUsuario("bloqueio-plano@x.com");
+  const a = cliente();
+  await a("POST", "/api/auth/login", { email: "admin@teste.com", senha: "admin-senha-123" });
+  await a("POST", `/api/admin/usuarios/${id}/pro`, { dias: 30 });
+  const ids = [];
+  for (let i = 1; i <= 12; i++) ids.push((await c("POST", "/api/insumos", { nome: `Insumo ${i}`, qtd: 1, unidade: "kg", preco: i })).body.insumo.id);
+  const ficha = (n, insumoId) => ({ nome: n, rendimento: 1, cmvAlvo: 30, itens: [{ insumoId, qtd: 100, unidade: "g" }] });
+  const f1 = (await c("POST", "/api/receitas", ficha("F1", ids[0]))).body.receita;
+  await c("POST", "/api/receitas", ficha("F2", ids[1]));
+  const f3 = (await c("POST", "/api/receitas", ficha("F3", ids[11]))).body.receita;
+
+  // vence o Pro
+  await run("UPDATE users SET pro_ate = $1 WHERE id = $2", new Date(Date.now() - 864e5).toISOString(), id);
+  const me = (await c("GET", "/api/me")).body.user;
+  assert.deepEqual(me.bloqueados, { insumos: 2, receitas: 1 });
+  const lista = (await c("GET", "/api/insumos")).body.insumos;
+  assert.equal(lista.length, 12, "nada foi apagado");
+  assert.deepEqual(lista.filter((i) => i.bloqueado).map((i) => i.id).sort(), [ids[10], ids[11]].sort(), "bloqueia os mais novos");
+  // insumo bloqueado: não edita, não exclui
+  const ed = await c("PUT", `/api/insumos/${ids[11]}`, { nome: "X", qtd: 1, unidade: "kg", preco: 99 });
+  assert.equal(ed.status, 402); assert.equal(ed.body.code, "item_bloqueado");
+  assert.equal((await c("DELETE", `/api/insumos/${ids[10]}`)).body.code, "item_bloqueado");
+  // insumo liberado continua editável
+  assert.equal((await c("PUT", `/api/insumos/${ids[0]}`, { nome: "Insumo 1", qtd: 1, unidade: "kg", preco: 2 })).status, 200);
+  // fichas: a mais nova fica bloqueada e sem conteúdo exposto
+  const rec = (await c("GET", "/api/receitas")).body.receitas;
+  assert.equal(rec.length, 3);
+  const r3 = rec.find((r) => r.id === f3.id);
+  assert.equal(r3.bloqueado, true); assert.deepEqual(r3.itens, []);
+  assert.equal((await c("GET", `/api/receitas/${f3.id}`)).body.code, "item_bloqueado");
+  assert.equal((await c("PUT", `/api/receitas/${f3.id}`, ficha("F3b", ids[0]))).body.code, "item_bloqueado");
+  assert.equal((await c("DELETE", `/api/receitas/${f3.id}`)).body.code, "item_bloqueado");
+  // ficha liberada não pode receber insumo bloqueado novo
+  assert.equal((await c("PUT", `/api/receitas/${f1.id}`, ficha("F1", ids[10]))).status, 400);
+  // renovou: tudo volta
+  await a("POST", `/api/admin/usuarios/${id}/pro`, { dias: 30 });
+  const me2 = (await c("GET", "/api/me")).body.user;
+  assert.deepEqual(me2.bloqueados, { insumos: 0, receitas: 0 });
+  const r3b = (await c("GET", `/api/receitas/${f3.id}`)).body.receita;
+  assert.equal(r3b.itens.length, 1, "conteúdo da ficha preservado");
+});
+
+test("segurança: cookie, cache, origem e troca de senha", async () => {
+  const c1 = cliente();
+  const r = await c1("POST", "/api/auth/cadastro", { nome: "Sec", telefone: "15998765432", email: "sec@x.com", senha: "senha-forte-1" });
+  const sc = r.headers.get("set-cookie");
+  assert.match(sc, /HttpOnly/); assert.match(sc, /SameSite=Lax/); assert.match(sc, /Path=\//);
+  assert.equal((await c1("GET", "/api/me")).headers.get("cache-control"), "no-store");
+  // escrita vinda de outro site
+  assert.equal((await c1("PUT", "/api/me", { nome: "X", telefone: "15998765432" }, { Origin: "https://site-malicioso.com" })).status, 403);
+  // segunda sessão é encerrada ao trocar a senha
+  const c2 = cliente();
+  assert.equal((await c2("POST", "/api/auth/login", { email: "sec@x.com", senha: "senha-forte-1" })).status, 200);
+  assert.equal((await c1("PUT", "/api/me/senha", { atual: "senha-forte-1", nova: "senha-nova-22" })).status, 200);
+  assert.equal((await c1("GET", "/api/me")).status, 200, "sessão atual continua");
+  assert.equal((await c2("GET", "/api/me")).status, 401, "outra sessão encerrada");
+  // cabeçalhos de segurança
+  const h = (await c1("GET", "/api/config")).headers;
+  assert.match(h.get("content-security-policy"), /frame-ancestors 'none'/);
+  assert.equal(h.get("x-frame-options"), "DENY");
 });

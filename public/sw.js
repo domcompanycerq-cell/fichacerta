@@ -1,7 +1,7 @@
 // Service worker do Ficha Certa: permite instalar o app e abrir a tela mesmo sem internet.
 // Arquivos do app: rede primeiro (para sempre pegar a versão nova), cache como reserva.
 // A API (/api/...) nunca é guardada em cache: os dados vêm sempre do servidor.
-const CACHE = "ficha-certa-v1";
+const CACHE = "ficha-certa-v2"; // troque o número quando mudar a lista de arquivos
 const ARQUIVOS = ["/", "/index.html", "/style.css", "/calc.js", "/ui.js", "/app.js", "/manifest.webmanifest", "/icons/icon-192.png"];
 
 self.addEventListener("install", (e) => {
@@ -16,7 +16,8 @@ self.addEventListener("fetch", (e) => {
   e.respondWith(
     fetch(e.request)
       .then((r) => {
-        if (r.ok && r.type === "basic") { const copia = r.clone(); caches.open(CACHE).then((c) => c.put(e.request, copia)); }
+        const proibido = /no-store|private/.test(r.headers.get("cache-control") || "");
+        if (r.ok && r.type === "basic" && !proibido) { const copia = r.clone(); caches.open(CACHE).then((c) => c.put(e.request, copia)); }
         return r;
       })
       .catch(() => caches.match(e.request).then((r) => r || (e.request.mode === "navigate" ? caches.match("/index.html") : Response.error())))
