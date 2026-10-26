@@ -15,6 +15,7 @@
     if (typeof s === "number") return s;
     s = String(s == null ? "" : s).replace(/r\$/i, "").replace(/\s/g, "");
     if (s.includes(",")) s = s.replace(/\./g, "").replace(",", ".");
+    else if (/^-?\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, ""); // "1.000" e "12.500" no formato brasileiro
     const n = parseFloat(s);
     return isFinite(n) ? n : NaN;
   }

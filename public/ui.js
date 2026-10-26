@@ -105,6 +105,15 @@
     users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14a6.5 6.5 0 0 1 3.5 6"/>',
     send: '<path d="M21 3 10 14M21 3l-7 18-4-7-7-4 18-7Z"/>',
     shield: '<path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6l-8-3Z"/>',
+    home: '<path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 9.5V20h13V9.5"/><path d="M10 20v-5.5h4V20"/>',
+    alert: '<path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 10v4.5M12 17.5v.3"/>',
+    trend: '<path d="M3 17 9 11l4 4 8-8"/><path d="M15 7h6v6"/>',
+    gift: '<rect x="3.5" y="8" width="17" height="4" rx="1"/><path d="M5 12v8h14v-8M12 8v12"/><path d="M12 8c-1.5-3-5-3.5-5-1.2C7 8 9.5 8 12 8Zm0 0c1.5-3 5-3.5 5-1.2C17 8 14.5 8 12 8Z"/>',
+    dots: '<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>',
+    search: '<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/>',
+    chat: '<path d="M4 19.5 5.3 16A8 8 0 1 1 8 18.7L4 19.5Z"/><path d="M9 10.5h6M9 13.5h4"/>',
+    wheat: '<path d="M12 21V8"/><path d="M12 8c0-2.5 1.5-4.5 3.5-5 .5 2.5-1 4.5-3.5 5Zm0 0c0-2.5-1.5-4.5-3.5-5-.5 2.5 1 4.5 3.5 5Zm0 5c0-2.5 1.5-4.5 3.5-5 .5 2.5-1 4.5-3.5 5Zm0 0c0-2.5-1.5-4.5-3.5-5-.5 2.5 1 4.5 3.5 5Zm0 5c0-2.5 1.5-4.5 3.5-5 .5 2.5-1 4.5-3.5 5Zm0 0c0-2.5-1.5-4.5-3.5-5-.5 2.5 1 4.5 3.5 5Z"/>',
+    scale: '<path d="M12 4v16M7 20h10M5 8h14"/><path d="m5 8-2.5 6a3 3 0 0 0 5 0L5 8Zm14 0-2.5 6a3 3 0 0 0 5 0L19 8Z"/>',
     chef: '<path d="M7 14a4 4 0 1 1 1.5-7.7A4 4 0 0 1 16 6a4 4 0 1 1 1 8v6H7v-6Z"/><path d="M7 17h10"/>',
   };
   const icon = (n) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[n] || ""}</svg>`;

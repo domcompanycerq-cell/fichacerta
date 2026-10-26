@@ -7,6 +7,8 @@ App web (instalável no celular) para cozinhas: o usuário cadastra insumos (nom
 ## Funcionalidades
 
 **App do usuário** (`/`)
+- **Início:** painel com insumos, fichas, custo médio por porção, CMV médio, fichas que precisam de atenção (CMV acima do alvo ou pendências), insumos que mais pesam no custo e preços atualizados recentemente.
+- **Celular:** barra de abas embaixo (Início, Insumos, Fichas, Mais), botão "+" flutuante, insumos em cartões com o preço editável, formulários que sobem da parte de baixo e barra fixa com o custo e o botão Salvar na ficha.
 - Cadastro com nome, DDD + telefone e e-mail. Login com e-mail e senha (sessão de 30 dias).
 - Insumos em tabela: preço editável direto na célula, importação por lista (`Arroz, 1kg, R$3,60`).
 - Fichas técnicas: quantidade, unidade (g, kg, ml, L, un, dz) e fator de correção. Mostra custo total, custo por porção, preço sugerido pelo CMV alvo e CMV praticado.
@@ -22,6 +24,8 @@ App web (instalável no celular) para cozinhas: o usuário cadastra insumos (nom
 | Insumos | até 10 | ilimitados |
 | Fichas técnicas | até 2 | ilimitadas |
 | Histórico de preços | não | sim |
+
+**Oferta de boas-vindas:** quem nunca assinou paga **R$ 10 nos primeiros 30 dias** do Pro (depois, R$ 25/mês). O app mostra a oferta no Início, no menu e na página de plano, e a mensagem do WhatsApp já pede a oferta. No painel admin, o usuário elegível aparece com a etiqueta "Oferta 1º mês"; ao clicar em **+30 dias** com "registrar como pagamento recebido", o pagamento é gravado como R$ 10. A oferta vale uma vez por conta. O valor muda em `PRO_PRICE_OFERTA`.
 
 Os limites valem no servidor. Se o Pro vence (ou o admin volta a conta ao Free), **nada é apagado**: ficam liberados os 10 insumos e as 2 fichas mais antigos, e o restante fica **bloqueado**. Itens bloqueados aparecem com um cadeado, não podem ser editados, excluídos nem usados em fichas novas, e o conteúdo das fichas bloqueadas fica oculto. Ao renovar o Pro, tudo é desbloqueado na hora.
 

@@ -11,6 +11,7 @@
   const MODELOS = {
     renovacao: { titulo: "Renove seu plano Pro", mensagem: "Seu plano Pro está perto do vencimento. Fale com o suporte no WhatsApp para renovar e manter insumos e fichas ilimitados e o histórico de preços." },
     vencido: { titulo: "Seu plano Pro venceu", mensagem: "Seu plano Pro venceu e a conta voltou ao Free. Seus dados continuam salvos. Fale com o suporte no WhatsApp para renovar e voltar ao acesso completo." },
+    oferta: { titulo: "Oferta: Pro por R$ 10 no primeiro mês", mensagem: "Experimente o plano Pro com desconto: os primeiros 30 dias saem por R$ 10 (depois, R$ 25/mês). Insumos e fichas sem limite e histórico de preços. Para aproveitar, toque em Plano e assinatura e fale com o suporte no WhatsApp." },
     convite: { titulo: "Conheça o plano Pro", mensagem: "Com o Pro você cadastra insumos e fichas técnicas sem limite e acompanha o histórico de preços de cada insumo. Para assinar, fale com o suporte no WhatsApp pela página Plano e assinatura." },
   };
 
@@ -185,7 +186,7 @@
         <div class="props">
           <div class="k">${icon("send")}E-mail</div><div class="v" style="padding:6px">${esc(u.email)}</div>
           <div class="k">${icon("hash")}Telefone</div><div class="v" style="padding:6px"><a href="${wa(u)}" target="_blank" rel="noopener">${esc(telBR(u.telefone))}</a> <span class="faint small">abre no WhatsApp</span></div>
-          <div class="k">${icon("card")}Plano</div><div class="v" style="padding:6px">${planoTag(u)} <span class="small">${venceTxt(u)}</span></div>
+          <div class="k">${icon("card")}Plano</div><div class="v" style="padding:6px">${planoTag(u)} <span class="small">${venceTxt(u)}</span> ${u.ofertaDisponivel ? `<span class="tag orange">Oferta 1º mês: ${brl(S.resumo ? S.resumo.precoOferta : 10)}</span>` : ""}</div>
           <div class="k">${icon("shield")}Status</div><div class="v" style="padding:6px">${statusTag(u)} ${u.motivoBloqueio ? `<span class="small muted">${esc(u.motivoBloqueio)}</span>` : ""}</div>
           <div class="k">${icon("box")}Uso</div><div class="v" style="padding:6px">${u.insumos} insumos · ${u.receitas} fichas</div>
           <div class="k">${icon("coin")}Total pago</div><div class="v" style="padding:6px">${brl(u.totalPago)}</div>
@@ -196,6 +197,9 @@
         <div class="row">
           <button class="btn primary" data-pro="30">+30 dias</button><button class="btn" data-pro="90">+90 dias</button><button class="btn" data-pro="365">+1 ano</button>
           <label class="row small muted" style="gap:4px"><input type="checkbox" id="regPag" checked> registrar como pagamento recebido</label>
+        </div>
+        ${u.ofertaDisponivel ? `<p class="small muted" style="margin:6px 0 0">Primeira assinatura: os primeiros 30 dias são registrados pelo valor da oferta (${brl(S.resumo ? S.resumo.precoOferta : 10)}); meses extras, pelo preço normal.</p>` : ""}
+        <div>
         </div>
         <div class="row" style="margin-top:8px"><label class="small muted" for="ate">Ou definir vencimento</label><input class="input" type="date" id="ate" style="width:auto"><button class="btn" id="setAte">Aplicar</button>
           ${u.plano === "pro" || u.vencido ? `<button class="btn ghost danger" id="toFree">Voltar ao Free</button>` : ""}</div>
@@ -210,7 +214,7 @@
         <div class="row"><button class="btn" id="msgRenov">${icon("send")}Lembrete de renovação</button><a class="btn ghost" target="_blank" rel="noopener" href="${wa(u, `Olá, ${u.nome.split(" ")[0]}! `)}">Abrir WhatsApp</a></div>
         <div class="err" id="pe"></div>
 
-        ${d.pagamentos.length ? `<div class="h2" style="font-size:16px">Pagamentos</div><div class="table-wrap"><table class="db" style="min-width:0"><thead><tr><th>Data</th><th class="r">Valor</th><th>Período</th><th>Origem</th><th>Situação</th></tr></thead><tbody>${d.pagamentos.map((x) => `<tr><td class="small num">${dataBR(x.aprovadoEm || x.criadoEm)}</td><td class="r num">${brl(x.valor)}</td><td>${x.dias}d</td><td class="small">WhatsApp</td><td><span class="tag ${x.status === "pendente" ? "yellow" : "green"}">${x.status}</span></td></tr>`).join("")}</tbody></table></div>` : ""}
+        ${d.pagamentos.length ? `<div class="h2" style="font-size:16px">Pagamentos</div><div class="table-wrap"><table class="db" style="min-width:0"><thead><tr><th>Data</th><th class="r">Valor</th><th>Período</th><th>Origem</th><th>Situação</th></tr></thead><tbody>${d.pagamentos.map((x) => `<tr><td class="small num">${dataBR(x.aprovadoEm || x.criadoEm)}</td><td class="r num">${brl(x.valor)}</td><td>${x.dias}d</td><td class="small">${x.provider === "whatsapp-oferta" ? "WhatsApp (oferta)" : "WhatsApp"}</td><td><span class="tag ${x.status === "pendente" ? "yellow" : "green"}">${x.status}</span></td></tr>`).join("")}</tbody></table></div>` : ""}
         ${d.log.length ? `<div class="h2" style="font-size:16px">Ações do administrador</div><div class="list">${d.log.map((l) => `<div class="list-item" style="padding:6px 0"><div class="li-body"><span class="small"><b>${esc(l.acao)}</b> ${esc(l.detalhe)}</span><div class="li-meta">${dataHoraBR(l.criadoEm)}</div></div></div>`).join("")}</div>` : ""}
         ${d.notificacoes.length ? `<div class="h2" style="font-size:16px">Notificações recebidas</div><div class="list">${d.notificacoes.map((n) => `<div class="list-item" style="padding:6px 0"><span class="dot ${n.lida ? "read" : ""}"></span><div class="li-body"><span class="small">${esc(n.titulo)}</span><div class="li-meta">${dataHoraBR(n.criadoEm)} · ${n.lida ? "lida" : "não lida"}</div></div></div>`).join("")}</div>` : ""}
       </div></div>`);
@@ -250,7 +254,7 @@
             : `<select class="input" id="dest">${FILTROS.map(([k, t]) => `<option value="${k}" ${o.filtro === k ? "selected" : ""}>${k === "todos" ? "Todos os usuários" : t}</option>`).join("")}</select>`}
         </div>
         <div class="field"><label>Modelo</label><div class="row">
-          <button type="button" class="btn" data-m="renovacao">Renovação</button><button type="button" class="btn" data-m="vencido">Plano vencido</button><button type="button" class="btn" data-m="convite">Convite para o Pro</button></div></div>
+          <button type="button" class="btn" data-m="renovacao">Renovação</button><button type="button" class="btn" data-m="vencido">Plano vencido</button><button type="button" class="btn" data-m="oferta">Oferta R$ 10</button><button type="button" class="btn" data-m="convite">Convite para o Pro</button></div></div>
         <div class="field"><label for="nt">Título</label><input class="input" id="nt" maxlength="120"></div>
         <div class="field"><label for="nm">Mensagem</label><textarea class="input" id="nm" rows="5" maxlength="2000"></textarea></div>
         <label class="row small"><input type="checkbox" id="ne" ${S.resumo && !S.resumo.emailAtivo ? "" : "checked"}> Enviar também por e-mail</label>

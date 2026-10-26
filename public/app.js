@@ -6,6 +6,9 @@
 
   const S = { me: null, cfg: {}, insumos: [], receitas: [], insMap: {}, q: "", qRec: "", dirty: false };
   const isPro = () => S.me && S.me.plano === "pro";
+  // Valores dentro de campos editáveis vão sem separador de milhar ("1000", não "1.000"),
+  // para que o número relido seja sempre o mesmo que foi mostrado.
+  const fin = (n, d = 3) => (isFinite(n) ? n : 0).toLocaleString("pt-BR", { maximumFractionDigits: d, useGrouping: false });
   const p2 = (n) => (isFinite(n) ? n : 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const setInsumos = (list) => { S.insumos = [...list].sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")); S.insMap = {}; S.insumos.forEach((i) => { S.insMap[i.id] = i; }); };
   const usadoEm = (id) => S.receitas.filter((r) => r.itens.some((l) => l.insumoId === id));
@@ -16,13 +19,24 @@
     const num = S.cfg.suporteWhatsApp || "5515988305442";
     const nome = S.cfg.appName || "Ficha Certa";
     const textos = {
-      assinar: `Olá! Quero assinar o plano Pro do ${nome} (R$ ${fmt(S.cfg.preco || 25, 2)}/mês).`,
+      assinar: ofertaAtiva()
+        ? `Olá! Quero assinar o plano Pro do ${nome} com a oferta de R$ ${fmt(precoOferta(), 2)} nos primeiros ${S.cfg.diasOferta || 30} dias.`
+        : `Olá! Quero assinar o plano Pro do ${nome} (R$ ${fmt(S.cfg.preco || 25, 2)}/mês).`,
       renovar: `Olá! Quero renovar meu plano Pro do ${nome}.`,
       ajuda: `Olá! Preciso de ajuda com o ${nome}.`,
     };
     let msg = textos[motivo] || textos.ajuda;
     if (S.me) msg += ` Meu e-mail de cadastro: ${S.me.email}`;
     return `https://wa.me/${num}?text=${encodeURIComponent(msg)}`;
+  }
+  // Oferta de boas-vindas: primeiros 30 dias do Pro por R$ 10 para quem nunca assinou.
+  const ofertaAtiva = () => !S.me || !!(S.me.oferta && S.me.oferta.disponivel);
+  const precoOferta = () => (S.me && S.me.oferta ? S.me.oferta.preco : S.cfg.precoOferta) || 10;
+  function ofertaBanner() {
+    if (!S.me || !ofertaAtiva() || isPro()) return "";
+    return `<div class="offer">${'<span class="o-ico">'}${icon("gift")}</span>
+      <div class="o-txt"><b>Oferta de boas-vindas: Pro por R$ ${fmt(precoOferta(), 2)} no primeiro mês</b><span>Insumos e fichas sem limite e histórico de preços. Depois, R$ ${fmt(S.me.preco, 2)}/mês.</span></div>
+      <a class="btn" href="${linkSuporte("assinar")}" target="_blank" rel="noopener">${icon("chat")}Quero a oferta</a></div>`;
   }
   const telSuporte = () => { const d = String(S.cfg.suporteWhatsApp || "5515988305442"); return `+${d.slice(0, 2)} (${d.slice(2, 4)}) ${d.slice(4, -4)}-${d.slice(-4)}`; };
   const motivoPro = () => (S.me && (S.me.plano === "pro" || S.me.vencido) ? "renovar" : "assinar");
@@ -107,7 +121,7 @@
         <div class="plan"><b>Free</b><ul>
           <li>${icon("check")}Até 10 insumos</li><li>${icon("check")}Até 2 fichas técnicas</li><li>${icon("check")}Recálculo automático</li>
           <li class="no">${icon("minus")}Histórico de preços</li></ul></div>
-        <div class="plan"><b>Pro · R$ ${fmt(25)}/mês</b><ul>
+        <div class="plan featured"><span class="ribbon">1º mês por R$ ${fmt(S.cfg.precoOferta || 10, 2)}</span><b>Pro · R$ ${fmt(S.cfg.preco || 25, 2)}/mês</b><ul>
           <li>${icon("check")}Insumos ilimitados</li><li>${icon("check")}Fichas técnicas ilimitadas</li><li>${icon("check")}Recálculo automático</li>
           <li>${icon("check")}Histórico de preços</li></ul></div>
       </div>` : "";
@@ -124,7 +138,7 @@
         if (modo === "cadastro") await api("POST", "/api/auth/cadastro", { nome: $("#nome").value, telefone: $("#tel").value, email: $("#email").value, senha: $("#senha").value });
         if (modo === "esqueci") { const r = await api("POST", "/api/auth/esqueci", { email: $("#email").value }); err.style.color = "var(--text-2)"; err.textContent = r.mensagem; btn.disabled = false; return; }
         if (modo === "redefinir") { await api("POST", "/api/auth/redefinir", { token, senha: $("#senha").value }); history.replaceState(null, "", "/"); renderAuth("login", null, "Senha alterada. Entre com a nova senha."); return; }
-        location.hash = modo === "cadastro" ? "#insumos" : location.hash;
+        location.hash = modo === "cadastro" ? "#inicio" : location.hash;
         boot();
       } catch (ex) { err.textContent = ex.message; btn.disabled = false; }
     });
@@ -139,26 +153,56 @@
 
   /* ================= estrutura ================= */
   function renderShell() {
+    document.body.classList.add("app-mobile");
     app.innerHTML = `
       <div class="shell">
         <aside class="sidebar" id="side"></aside>
         <div id="sideScrim" class="scrim-side" hidden></div>
         <main class="main" id="main">
-          <div class="topbar"><button class="icon-btn menu-btn" id="menuBtn" aria-label="Abrir menu">${icon("menu")}</button><span class="crumb" id="crumb"></span><span class="spacer"></span><span id="topActions" class="row"></span></div>
+          <div class="topbar" id="topbar"><button class="icon-btn menu-btn" id="menuBtn" aria-label="Abrir menu">${icon("menu")}</button><span class="crumb" id="crumb"></span><span class="spacer"></span><span id="topActions" class="row"></span></div>
           <div id="view"></div>
         </main>
-      </div>`;
+      </div>
+      <nav class="tabbar" id="tabbar" aria-label="Navegação"></nav>
+      <button class="fab" id="fab" hidden aria-label="Adicionar">${icon("plus")}</button>`;
     $("#menuBtn").onclick = () => toggleSide(true);
     $("#sideScrim").onclick = () => toggleSide(false);
+    $("#main").addEventListener("scroll", () => { $("#topbar").classList.toggle("scrolled", $("#main").scrollTop > 4); }, { passive: true });
     renderSidebar();
-    if (!location.hash || location.hash === "#") location.hash = "#insumos"; else route();
+    if (!location.hash || location.hash === "#") location.hash = "#inicio"; else route();
   }
   function toggleSide(open) { $("#side").classList.toggle("open", open); $("#sideScrim").hidden = !open; }
 
+  // Itens de navegação: rota, ícone, nome e cor da área.
+  const NAV = [
+    ["#inicio", "home", "Início", "c-home"],
+    ["#insumos", "box", "Insumos", "c-ins"],
+    ["#fichas", "book", "Fichas técnicas", "c-fic"],
+    ["#historico", "history", "Histórico de preços", "c-his"],
+    ["#notificacoes", "bell", "Notificações", "c-not"],
+    ["#plano", "card", "Plano e assinatura", "c-pla"],
+    ["#conta", "user", "Meus dados", "c-usr"],
+  ];
+  const rotaAtual = () => { const h = location.hash.split("/")[0] || "#inicio"; return h === "#ficha" ? "#fichas" : h; };
+  const ico = (nome, cor) => `<span class="ico ${cor}">${icon(nome)}</span>`;
+  const lockMini = () => icon("lock").replace("<svg", '<svg style="width:14px;height:14px"');
+
+  function navItem([href, ic, nome, cor], extra = "") {
+    return `<button class="nav-item" data-href="${href}" ${rotaAtual() === href ? 'aria-current="page"' : ""}>${ico(ic, cor)}${nome}${extra}</button>`;
+  }
+  function extraNav(href) {
+    const me = S.me;
+    if (href === "#insumos") return `<span class="count">${me.uso.insumos}</span>`;
+    if (href === "#fichas") return `<span class="count">${me.uso.receitas}</span>`;
+    if (href === "#historico" && !isPro()) return `<span class="count">${lockMini()}</span>`;
+    if (href === "#notificacoes" && me.naoLidas) return `<span class="badge">${me.naoLidas}</span>`;
+    return "";
+  }
+
   function renderSidebar() {
+    renderTabbar();
     const side = $("#side"); if (!side) return;
-    const me = S.me, h = location.hash.split("/")[0] || "#insumos";
-    const cur = (k) => (h === k || (k === "#fichas" && h === "#ficha") ? 'aria-current="page"' : "");
+    const me = S.me;
     const lim = me.limites;
     const meter = (rot, usado, max) => {
       if (max == null) return "";
@@ -166,25 +210,57 @@
       return `<div class="meter"><span>${rot}: ${usado} de ${max}</span><div class="bar"><i class="${usado >= max ? "full" : ""}" style="width:${p}%"></i></div></div>`;
     };
     side.innerHTML = `
-      <div class="ws"><span class="avatar">${esc((me.nome || "?")[0].toUpperCase())}</span><span class="who">${esc(me.nome)}</span>
-        <span class="tag ${isPro() ? "blue" : ""}" style="margin-left:auto">${isPro() ? "Pro" : "Free"}</span></div>
+      <div class="ws"><span class="brand-mark">${icon("chef")}</span><span class="who">${esc(S.cfg.appName || "Ficha Certa")}<small>${esc(me.nome)}</small></span>
+        <span class="tag ${isPro() ? "green" : ""}" style="margin-left:auto">${isPro() ? "Pro" : "Free"}</span></div>
+      ${navItem(NAV[0])}
       <div class="nav-label">Cozinha</div>
-      <button class="nav-item" data-href="#insumos" ${cur("#insumos")}>${icon("box")}Insumos<span class="count">${me.uso.insumos}</span></button>
-      <button class="nav-item" data-href="#fichas" ${cur("#fichas")}>${icon("book")}Fichas técnicas<span class="count">${me.uso.receitas}</span></button>
-      <button class="nav-item" data-href="#historico" ${cur("#historico")}>${icon("history")}Histórico de preços${isPro() ? "" : `<span class="count">${icon("lock").replace("<svg", '<svg style="width:14px;height:14px"')}</span>`}</button>
+      ${NAV.slice(1, 4).map((n) => navItem(n, extraNav(n[0]))).join("")}
       <div class="nav-label">Conta</div>
-      <button class="nav-item" data-href="#notificacoes" ${cur("#notificacoes")}>${icon("bell")}Notificações${me.naoLidas ? `<span class="badge">${me.naoLidas}</span>` : ""}</button>
-      <button class="nav-item" data-href="#plano" ${cur("#plano")}>${icon("card")}Plano e assinatura</button>
-      <button class="nav-item" data-href="#conta" ${cur("#conta")}>${icon("user")}Meus dados</button>
-      ${me.role === "admin" ? `<a class="nav-item" href="/admin" style="text-decoration:none">${icon("shield")}Painel admin</a>` : ""}
+      ${NAV.slice(4).map((n) => navItem(n, extraNav(n[0]))).join("")}
+      ${me.role === "admin" ? `<a class="nav-item" href="/admin">${ico("shield", "c-usr")}Painel admin</a>` : ""}
       <div class="side-foot">
         ${meter("Insumos", me.uso.insumos, lim.insumos)}
         ${meter("Fichas", me.uso.receitas, lim.receitas)}
-        ${!isPro() ? `<button class="btn primary" data-href="#plano">Assinar Pro · R$ ${fmt(me.preco, 2)}/mês</button>` : me.diasRestantes <= 7 ? `<button class="btn" data-href="#plano">Pro vence em ${me.diasRestantes} dia(s)</button>` : ""}
-        <button class="nav-item" id="sair" style="padding-left:0">${icon("logout")}Sair</button>
+        ${!isPro() ? (ofertaAtiva() ? `<button class="btn accent" data-href="#plano">${icon("gift")}Pro por R$ ${fmt(precoOferta(), 2)} no 1º mês</button>` : `<button class="btn primary" data-href="#plano">Assinar Pro · R$ ${fmt(me.preco, 2)}/mês</button>`) : me.diasRestantes <= 7 ? `<button class="btn" data-href="#plano">Pro vence em ${me.diasRestantes} dia(s)</button>` : ""}
+        <button class="nav-item" id="sair">${ico("logout", "c-usr")}Sair</button>
       </div>`;
     $$("[data-href]", side).forEach((b) => b.addEventListener("click", () => { location.hash = b.dataset.href; toggleSide(false); }));
-    $("#sair").onclick = async () => { await api("POST", "/api/auth/logout").catch(() => {}); S.me = null; history.replaceState(null, "", "/"); renderAuth("login"); };
+    $("#sair").onclick = sair;
+  }
+  async function sair() { await api("POST", "/api/auth/logout").catch(() => {}); S.me = null; document.body.classList.remove("app-mobile"); history.replaceState(null, "", "/"); renderAuth("login"); }
+
+  // Barra de abas do celular: Início, Insumos, Fichas e "Mais" (o resto do menu numa folha).
+  function renderTabbar() {
+    const tb = $("#tabbar"); if (!tb || !S.me) return;
+    const atual = rotaAtual();
+    const naMais = ["#historico", "#notificacoes", "#plano", "#conta"].includes(atual);
+    const aba = (href, ic, nome) => `<button data-tab="${href}" ${atual === href ? 'aria-current="page"' : ""}>${icon(ic)}<span>${nome}</span></button>`;
+    tb.innerHTML = aba("#inicio", "home", "Início") + aba("#insumos", "box", "Insumos") + aba("#fichas", "book", "Fichas") +
+      `<button data-tab="mais" ${naMais ? 'aria-current="page"' : ""}>${icon("dots")}<span>Mais</span>${S.me.naoLidas ? `<span class="badge">${S.me.naoLidas}</span>` : ""}</button>`;
+    $$("[data-tab]", tb).forEach((b) => b.addEventListener("click", () => {
+      if (b.dataset.tab === "mais") return abrirMais();
+      if (location.hash.split("/")[0] === b.dataset.tab) { $("#main").scrollTo({ top: 0, behavior: "smooth" }); return; }
+      location.hash = b.dataset.tab;
+    }));
+  }
+  function abrirMais() {
+    const me = S.me;
+    const m = overlay(`<div class="modal" role="dialog" aria-modal="true" aria-label="Mais opções"><div class="sheet-grab"></div>
+      <div class="ws" style="padding:4px 4px 10px"><span class="avatar">${esc((me.nome || "?")[0].toUpperCase())}</span><span class="who">${esc(me.nome)}<small>${esc(me.email)}</small></span><span class="tag ${isPro() ? "green" : ""}" style="margin-left:auto">${isPro() ? "Pro" : "Free"}</span></div>
+      ${!isPro() && ofertaAtiva() ? ofertaBanner() : ""}
+      <div class="more-list">
+        ${NAV.slice(3).map((n) => navItem(n, extraNav(n[0]))).join("")}
+        ${me.role === "admin" ? `<a class="nav-item" href="/admin">${ico("shield", "c-usr")}Painel admin</a>` : ""}
+        <a class="nav-item" href="${linkSuporte("ajuda")}" target="_blank" rel="noopener">${ico("chat", "c-fic")}Falar com o suporte</a>
+        <button class="nav-item" id="sairM">${ico("logout", "c-usr")}Sair</button>
+      </div></div>`, { center: true });
+    $$("[data-href]", m.root).forEach((b) => b.addEventListener("click", () => { m.close(); location.hash = b.dataset.href; }));
+    $("#sairM", m.root).onclick = () => { m.close(); sair(); };
+  }
+  // Botão flutuante "+" do celular (cada tela define a ação).
+  function setFab(fn, rotulo) {
+    const f = $("#fab"); if (!f) return;
+    f.hidden = !fn; f.onclick = fn || null; if (rotulo) f.setAttribute("aria-label", rotulo);
   }
 
   window.addEventListener("hashchange", () => { if (S.me) route(); });
@@ -198,21 +274,23 @@
     lastHash = location.hash;
     const [h, arg] = location.hash.split("/");
     $("#topActions").innerHTML = "";
+    setFab(null);
     renderSidebar();
     $("#main").scrollTop = 0;
-    const views = { "#insumos": viewInsumos, "#fichas": viewFichas, "#ficha": () => viewFicha(arg), "#historico": viewHistorico, "#notificacoes": viewNotificacoes, "#plano": viewPlano, "#conta": viewConta };
-    (views[h] || viewInsumos)();
+    const views = { "#inicio": viewInicio, "#insumos": viewInsumos, "#fichas": viewFichas, "#ficha": () => viewFicha(arg), "#historico": viewHistorico, "#notificacoes": viewNotificacoes, "#plano": viewPlano, "#conta": viewConta };
+    (views[h] || viewInicio)();
   }
   const crumb = (t) => { $("#crumb").textContent = t; };
-  const pageHead = (ic, titulo, desc) => `<div class="page-icon">${icon(ic)}</div><h1 class="page-title">${esc(titulo)}</h1>${desc ? `<p class="page-desc">${desc}</p>` : ""}`;
+  const COR = { box: "c-ins", book: "c-fic", history: "c-his", bell: "c-not", card: "c-pla", user: "c-usr", home: "c-home" };
+  const pageHead = (ic, titulo, desc) => `<div class="page-head"><div class="page-icon ${COR[ic] || ""}">${icon(ic)}</div><h1 class="page-title">${esc(titulo)}</h1></div>${desc ? `<p class="page-desc">${desc}</p>` : '<div style="height:14px"></div>'}`;
 
   function upsell(msg) {
-    const m = overlay(`<div class="modal" role="dialog" aria-modal="true">
+    const m = overlay(`<div class="modal" role="dialog" aria-modal="true"><div class="sheet-grab"></div>
       <h2>Disponível no plano Pro</h2>
       <p class="muted" style="margin:0 0 14px">${esc(msg)}</p>
-      <div class="plan" style="margin-bottom:14px"><div class="price">R$ ${fmt(S.me.preco, 2)} <small>/ mês</small></div>
+      <div class="plan ${ofertaAtiva() ? "featured" : ""}" style="margin:${ofertaAtiva() ? "18px" : "0"} 0 14px">${ofertaAtiva() ? `<span class="ribbon">Oferta de boas-vindas</span><div class="price"><s>R$ ${fmt(S.me.preco, 2)}</s>R$ ${fmt(precoOferta(), 2)} <small>no 1º mês</small></div><span class="small muted">Depois, R$ ${fmt(S.me.preco, 2)}/mês.</span>` : `<div class="price">R$ ${fmt(S.me.preco, 2)} <small>/ mês</small></div>`}
         <ul><li>${icon("check")}Insumos e fichas técnicas ilimitados</li><li>${icon("check")}Histórico de preços de cada insumo</li><li>${icon("check")}Seus dados continuam salvos se o plano vencer</li></ul></div>
-      <div class="row" style="justify-content:flex-end"><button class="btn ghost" id="mc">Agora não</button><a class="btn primary" id="mg" href="${linkSuporte(motivoPro())}" target="_blank" rel="noopener">Assinar pelo WhatsApp</a></div>
+      <div class="row" style="justify-content:flex-end"><button class="btn ghost" id="mc">Agora não</button><a class="btn ${ofertaAtiva() ? "accent" : "primary"}" id="mg" href="${linkSuporte(motivoPro())}" target="_blank" rel="noopener">${icon("chat")}${ofertaAtiva() ? "Quero a oferta" : "Assinar pelo WhatsApp"}</a></div>
       <p class="small faint" style="margin:10px 0 0;text-align:right">O pagamento é feito com o suporte: ${esc(telSuporte())}</p>
     </div>`, { center: true });
     $("#mc", m.root).onclick = m.close;
@@ -230,36 +308,142 @@
       <div style="margin-top:8px"><a class="btn primary" href="${linkSuporte("renovar")}" target="_blank" rel="noopener">Renovar pelo WhatsApp</a></div></div></div>`;
   }
 
+  /* ================= início (painel) ================= */
+  function viewInicio() {
+    crumb("Início");
+    const me = S.me;
+    const ativas = S.receitas.filter((r) => !r.bloqueado);
+    const calc = ativas.map((r) => ({ r, c: C.calcRecipe(r, S.insMap) }));
+    const comVenda = calc.filter((x) => x.c.venda > 0);
+    const acima = comVenda.filter((x) => x.c.cmvReal > (x.r.cmvAlvo || 30) / 100);
+    const pend = calc.filter((x) => x.c.errs);
+    const custoMedio = calc.length ? calc.reduce((t, x) => t + x.c.porcao, 0) / calc.length : 0;
+    const cmvMedio = comVenda.length ? comVenda.reduce((t, x) => t + x.c.cmvReal, 0) / comVenda.length : NaN;
+
+    // Quanto cada insumo pesa somando todas as fichas (custo de uma receita inteira de cada ficha).
+    const peso = {};
+    calc.forEach(({ c }) => c.lines.forEach((l) => { if (l.ins && !l.err) peso[l.insumoId] = (peso[l.insumoId] || 0) + l.cost; }));
+    const topIns = Object.entries(peso).map(([id, v]) => ({ i: S.insMap[id], v })).filter((x) => x.i).sort((a, b) => b.v - a.v).slice(0, 5);
+    const maxIns = topIns.length ? topIns[0].v : 1;
+    const topFichas = [...calc].sort((a, b) => b.c.porcao - a.c.porcao).slice(0, 6);
+    const maxF = topFichas.length ? topFichas[0].c.porcao : 1;
+    const recentes = [...S.insumos].sort((a, b) => String(b.atualizadoEm).localeCompare(String(a.atualizadoEm))).slice(0, 5);
+    const atencao = [...pend.map((x) => ({ ...x, motivo: `${x.c.errs} pendência${x.c.errs > 1 ? "s" : ""}`, cls: "red" })),
+      ...acima.filter((x) => !x.c.errs).map((x) => ({ ...x, motivo: `CMV ${pct(x.c.cmvReal)} · alvo ${fmt(x.r.cmvAlvo, 0)}%`, cls: "red" }))].slice(0, 5);
+
+    const hora = new Date().getHours();
+    const saud = hora < 12 ? "Bom dia" : hora < 18 ? "Boa tarde" : "Boa noite";
+    const kpi = (href, ic, cor, lbl, val, sub, subCls = "") => `<button class="kpi" data-go="${href}">
+      <div class="k-top"><span class="k-lbl">${lbl}</span><span class="k-ico ${cor}">${icon(ic)}</span></div>
+      <div class="k-val">${val}</div><div class="k-sub ${subCls}">${sub}</div></button>`;
+    const vazio = !S.insumos.length;
+
+    $("#view").innerHTML = `<div class="page wide">
+      <div class="hello"><div><h1>${saud}, ${esc((me.nome || "").split(" ")[0])}!</h1><p>${new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" })}</p></div>
+        <span class="tag ${isPro() ? "green" : ""}">${isPro() ? `Pro até ${dataBR(me.proAte)}` : "Plano Free"}</span></div>
+      ${avisoBloqueio()}
+      ${ofertaBanner()}
+      <div class="quick">
+        <button data-act="ins">${'<span class="q-ico c-ins">'}${icon("plus")}</span>Novo insumo</button>
+        <button data-act="ficha">${'<span class="q-ico c-fic">'}${icon("book")}</span>Nova ficha</button>
+        <button data-act="imp">${'<span class="q-ico c-his">'}${icon("upload")}</span>Importar lista</button>
+      </div>
+      ${vazio ? `<div class="panel empty-state"><div class="ill c-ins">${icon("box")}</div><h3>Comece pelos seus insumos</h3><p>Cadastre o que você compra, com a embalagem e o preço. Depois monte as fichas técnicas: o custo é calculado sozinho.</p><button class="btn primary" data-act="ins">${icon("plus")}Cadastrar primeiro insumo</button></div>` : `
+      <div class="kpis">
+        ${kpi("#insumos", "box", "c-ins", "Insumos", me.uso.insumos, me.limites.insumos != null ? `de ${me.limites.insumos} no Free` : "cadastrados")}
+        ${kpi("#fichas", "book", "c-fic", "Fichas técnicas", me.uso.receitas, me.limites.receitas != null ? `de ${me.limites.receitas} no Free` : "cadastradas")}
+        ${kpi("#fichas", "scale", "c-his", "Custo médio por porção", calc.length ? brl(custoMedio) : "—", calc.length ? `média de ${calc.length} ficha${calc.length > 1 ? "s" : ""}` : "nenhuma ficha ainda")}
+        ${kpi("#fichas", "percent", acima.length ? "c-pla" : "c-fic", "CMV médio praticado", comVenda.length ? pct(cmvMedio) : "—", acima.length ? `${acima.length} ficha${acima.length > 1 ? "s" : ""} acima do alvo` : comVenda.length ? "todas dentro do alvo" : "informe o preço de venda nas fichas", acima.length ? "bad" : "")}
+      </div>
+      <div class="dash-grid">
+        <div class="panel"><h3>Custo por porção<button data-go="#fichas">Ver fichas</button></h3>
+          ${topFichas.length ? `<div class="bars">${topFichas.map(({ r, c }) => {
+            const over = c.venda > 0 && c.cmvReal > (r.cmvAlvo || 30) / 100;
+            return `<button class="bar-row" data-ficha="${r.id}"><span class="bn">${esc(r.nome)}</span><span class="bv">${brl(c.porcao)}</span><span class="bt"><i class="${over ? "warn" : ""}" style="width:${Math.max(4, (c.porcao / maxF) * 100)}%"></i></span></button>`;
+          }).join("")}</div>` : `<div class="empty">Crie uma ficha técnica para ver o custo por porção aqui.</div>`}
+        </div>
+        <div class="panel"><h3>Precisam de atenção</h3>
+          ${atencao.length ? `<div class="mini-list">${atencao.map((x) => `<button class="mini-item" data-ficha="${x.r.id}">${icon("alert").replace("<svg", '<svg style="width:16px;height:16px;color:var(--red);flex:none"')}<span class="mi-name">${esc(x.r.nome)}</span><span class="tag ${x.cls}">${esc(x.motivo)}</span></button>`).join("")}</div>`
+            : `<div class="empty" style="padding:20px 8px">${icon("check").replace("<svg", '<svg style="width:22px;height:22px;color:var(--good);display:block;margin:0 auto 6px"')}Tudo certo: nenhuma ficha acima do CMV alvo ou com pendência.</div>`}
+        </div>
+        <div class="panel"><h3>Insumos que mais pesam nas fichas<button data-go="#insumos">Ver insumos</button></h3>
+          ${topIns.length ? `<div class="bars">${topIns.map(({ i, v }) => `<button class="bar-row" data-ins="${i.id}"><span class="bn">${esc(i.nome)}</span><span class="bv">${brl(v)}</span><span class="bt"><i class="ins" style="width:${Math.max(4, (v / maxIns) * 100)}%"></i></span></button>`).join("")}</div>
+            <p class="small faint" style="margin:10px 0 0">Soma do custo do insumo em todas as fichas (uma receita de cada).</p>` : `<div class="empty">Use os insumos nas fichas para ver quais pesam mais no custo.</div>`}
+        </div>
+        <div class="panel"><h3>Preços atualizados recentemente${isPro() ? '<button data-go="#historico">Histórico</button>' : ""}</h3>
+          <div class="mini-list">${recentes.map((i) => `<button class="mini-item" data-ins="${i.id}"><span class="mi-name">${i.bloqueado ? lockMini() + " " : ""}${esc(i.nome)}</span><span class="mi-val">${brl(i.preco)} · ${dataBR(i.atualizadoEm)}</span></button>`).join("")}</div>
+        </div>
+      </div>`}
+    </div>`;
+    const v = $("#view");
+    $$("[data-go]", v).forEach((b) => b.addEventListener("click", () => { location.hash = b.dataset.go; }));
+    $$("[data-ficha]", v).forEach((b) => b.addEventListener("click", () => { location.hash = `#ficha/${b.dataset.ficha}`; }));
+    $$("[data-ins]", v).forEach((b) => b.addEventListener("click", () => peekInsumo(Number(b.dataset.ins))));
+    $$("[data-act]", v).forEach((b) => b.addEventListener("click", () => {
+      const a = b.dataset.act;
+      if (a === "ins") return novoInsumo();
+      if (a === "imp") return modalImportar();
+      if (a === "ficha") return novaFicha();
+    }));
+  }
+  // Ações compartilhadas (painel, listas e botão flutuante).
+  function novoInsumo() {
+    const lim = S.me.limites.insumos;
+    if (lim != null && S.insumos.length >= lim) return upsell(`O plano Free permite até ${lim} insumos. Assine o Pro para cadastrar sem limite.`);
+    peekInsumo(null);
+  }
+  function novaFicha() {
+    const lim = S.me.limites.receitas;
+    if (!S.insumos.length) { location.hash = "#insumos"; toast("Cadastre ao menos um insumo antes de montar a ficha."); return; }
+    if (lim != null && S.receitas.length >= lim) return upsell(`O plano Free permite até ${lim} fichas técnicas. Assine o Pro para criar sem limite.`);
+    location.hash = "#ficha/nova";
+  }
+
   /* ================= insumos ================= */
   function viewInsumos() {
     crumb("Insumos");
     const lim = S.me.limites.insumos, cheio = lim != null && S.insumos.length >= lim;
     $("#view").innerHTML = `<div class="page wide">
-      ${pageHead("box", "Insumos", "Tudo o que você compra, com a embalagem e o preço pago. Mude o preço direto na tabela: as fichas técnicas que usam o item são recalculadas na hora.")}
+      ${pageHead("box", "Insumos", "Tudo o que você compra, com a embalagem e o preço pago. Mude o preço direto na lista: as fichas técnicas que usam o item são recalculadas na hora.")}
       ${avisoBloqueio() || (cheio ? `<div class="callout yellow">${icon("info")}<div class="ct">Você chegou ao limite de ${lim} insumos do plano Free. <a href="#plano">Assine o Pro</a> para cadastrar sem limite.</div></div>` : "")}
       <div class="db-toolbar">
-        <span class="view">${icon("table")}Tabela</span><span class="spacer"></span>
-        <input class="search" id="q" type="search" placeholder="Buscar…" value="${esc(S.q)}" aria-label="Buscar insumo">
-        <button class="btn ghost" id="imp">${icon("upload")}Importar lista</button>
-        <button class="btn primary" id="novo">${icon("plus")}Novo</button>
+        <span class="view">${icon("table")}${S.insumos.length} insumo${S.insumos.length === 1 ? "" : "s"}</span><span class="spacer"></span>
+        <div class="search-wrap">${icon("search")}<input class="search" id="q" type="search" placeholder="Buscar…" value="${esc(S.q)}" aria-label="Buscar insumo"></div>
+        <button class="btn" id="imp">${icon("upload")}<span class="desktop-only">Importar lista</span></button>
+        <button class="btn primary desktop-only" id="novo">${icon("plus")}Novo</button>
       </div>
-      <div class="table-wrap"><table class="db"><thead><tr>
+      <div class="ins-list" id="il2"></div>
+      <div class="table-wrap ins-table"><table class="db"><thead><tr>
         <th>Nome</th><th class="r">Embalagem</th><th class="r">Preço pago</th><th class="r">Custo base</th><th>Usado em</th><th>Atualizado</th>
       </tr></thead><tbody id="tb"></tbody></table></div>
-      <button class="add-row" id="addRow">${icon("plus")}Novo insumo</button>
+      <button class="add-row desktop-only" id="addRow">${icon("plus")}Novo insumo</button>
     </div>`;
-    const novo = () => (cheio ? upsell(`O plano Free permite até ${lim} insumos. Assine o Pro para cadastrar sem limite.`) : peekInsumo(null));
+    const novo = novoInsumo;
     $("#novo").onclick = novo; $("#addRow").onclick = novo;
+    setFab(novo, "Novo insumo");
     $("#imp").onclick = modalImportar;
     $("#q").addEventListener("input", (e) => { S.q = e.target.value; tabelaInsumos(); });
     tabelaInsumos();
   }
   function tabelaInsumos() {
     const tb = $("#tb"); if (!tb) return;
+    const lista = $("#il2");
     const q = norm(S.q);
     const list = S.insumos.filter((i) => !q || norm(i.nome).includes(q));
-    if (!S.insumos.length) { tb.innerHTML = `<tr><td colspan="6"><div class="empty">Nenhum insumo ainda. Clique em <b>Novo</b> ou importe uma lista como “Arroz, 1kg, 3,60”.</div></td></tr>`; return; }
-    if (!list.length) { tb.innerHTML = `<tr><td colspan="6"><div class="empty">Nada encontrado para “${esc(S.q)}”.</div></td></tr>`; return; }
+    if (!S.insumos.length) {
+      const vazio = `<div class="empty-state"><div class="ill c-ins">${icon("box")}</div><h3>Nenhum insumo ainda</h3><p>Cadastre o que você compra, com a embalagem e o preço. Ou importe uma lista como “Arroz, 1kg, 3,60”.</p></div>`;
+      tb.innerHTML = `<tr><td colspan="6">${vazio}</td></tr>`; lista.innerHTML = vazio; return;
+    }
+    if (!list.length) { const n = `<div class="empty">Nada encontrado para “${esc(S.q)}”.</div>`; tb.innerHTML = `<tr><td colspan="6">${n}</td></tr>`; lista.innerHTML = n; return; }
+    // Lista em cartões (celular): nome, embalagem e custo base, preço editável à direita.
+    lista.innerHTML = list.map((i) => {
+      const fam = C.UN[i.unidade].fam, n = usadoEm(i.id).length;
+      const meta = `${fmt(i.qtd, 3)} ${esc(i.unidade)} · ${brl(C.pricePerDisplayUnit(i))}/${C.BASE_LABEL[fam]}${n ? ` · ${n} ficha${n > 1 ? "s" : ""}` : ""}`;
+      if (i.bloqueado) return `<div class="ins-item locked" data-id="${i.id}"><span class="ii-ico c-usr">${icon("lock")}</span><div class="ii-body"><div class="ii-name">${esc(i.nome)}</div><div class="ii-meta">Bloqueado · ${meta}</div></div><span class="mi-val num">${brl(i.preco)}</span></div>`;
+      return `<div class="ins-item" data-id="${i.id}"><span class="ii-ico c-ins">${icon("box")}</span><div class="ii-body"><div class="ii-name">${esc(i.nome)}</div><div class="ii-meta">${meta}</div></div>
+        <label class="ii-price"><span>R$</span><input class="cell-input" data-preco="${i.id}" inputmode="decimal" enterkeyhint="done" value="${p2(i.preco).replace(/\./g, "")}" aria-label="Preço de ${esc(i.nome)}"></label></div>`;
+    }).join("");
+    $$(".ins-item", lista).forEach((el) => el.addEventListener("click", (e) => { if (!e.target.closest("label, input")) peekInsumo(Number(el.dataset.id)); }));
     tb.innerHTML = list.map((i) => {
       const fam = C.UN[i.unidade].fam, n = usadoEm(i.id).length;
       if (i.bloqueado) return `<tr class="click locked" data-id="${i.id}" title="Bloqueado no plano Free">
@@ -278,7 +462,8 @@
         <td class="muted small num">${dataBR(i.atualizadoEm)}</td></tr>`;
     }).join("");
     $$("tr.click", tb).forEach((tr) => tr.addEventListener("click", (e) => { if (!e.target.closest("input")) peekInsumo(Number(tr.dataset.id)); }));
-    $$("[data-preco]", tb).forEach((inp) => {
+    $$("[data-preco]", $("#view")).forEach((inp) => {
+      inp.addEventListener("focus", () => inp.select());
       inp.addEventListener("keydown", (e) => { if (e.key === "Enter") inp.blur(); if (e.key === "Escape") { inp.value = p2(S.insMap[inp.dataset.preco].preco); inp.blur(); } });
       inp.addEventListener("change", () => salvarPrecoInline(inp));
     });
@@ -297,7 +482,7 @@
     } catch (e) { inp.value = p2(i.preco); tratarErro(e); }
   }
   // Re-renderiza a tabela sem roubar o foco de quem está digitando em outra célula.
-  function tabelaInsumosDepois() { setTimeout(() => { if (!document.activeElement || !document.activeElement.matches("[data-preco]")) tabelaInsumos(); }, 1300); }
+  function tabelaInsumosDepois() { setTimeout(() => { if (!document.activeElement || !document.activeElement.matches("[data-preco], .search")) tabelaInsumos(); }, 1300); }
   function avisarImpacto(r) {
     if (!r.mudouPreco) return;
     const n = r.impacto.length;
@@ -309,21 +494,21 @@
     if (id && S.insMap[id] && S.insMap[id].bloqueado) return upsell(MSG_INS_BLOQ);
     const i = id ? S.insMap[id] : { nome: "", qtd: 1, unidade: "kg", preco: "" };
     const usadas = id ? usadoEm(id) : [];
-    const p = overlay(`<div class="peek" role="dialog" aria-modal="true">
+    const p = overlay(`<div class="peek" role="dialog" aria-modal="true"><div class="sheet-grab"></div>
       <div class="peek-head"><span class="muted small">${id ? "Insumo" : "Novo insumo"}</span><button class="icon-btn" id="pc" aria-label="Fechar">${icon("x")}</button></div>
       <form class="peek-body" id="pf" novalidate>
-        <input class="title-input" id="pn" placeholder="Nome do insumo" value="${esc(i.nome)}" autofocus>
+        <input class="title-input" id="pn" placeholder="Nome do insumo" value="${esc(i.nome)}" enterkeyhint="next" ${id ? "" : "autofocus"}>
         <div class="props">
-          <div class="k">${icon("hash")}Embalagem</div><div class="v row" style="flex-wrap:nowrap"><input class="input" id="pq" inputmode="decimal" style="max-width:110px" value="${i.qtd !== "" ? fmt(i.qtd, 3) : ""}">
+          <div class="k">${icon("hash")}Embalagem</div><div class="v row" style="flex-wrap:nowrap"><input class="input" id="pq" inputmode="decimal" style="max-width:110px" value="${i.qtd !== "" ? fin(i.qtd, 3) : ""}">
             <select class="input" id="pu" style="max-width:90px">${Object.keys(C.UN).map((u) => `<option ${u === i.unidade ? "selected" : ""}>${u}</option>`).join("")}</select></div>
-          <div class="k">${icon("coin")}Preço pago</div><div class="v"><input class="input" id="pp" inputmode="decimal" placeholder="3,60" value="${i.preco !== "" ? p2(i.preco) : ""}"></div>
+          <div class="k">${icon("coin")}Preço pago</div><div class="v"><input class="input" id="pp" inputmode="decimal" enterkeyhint="done" placeholder="3,60" value="${i.preco !== "" ? fin(i.preco, 2) : ""}"></div>
           <div class="k">${icon("chart")}Custo base</div><div class="v" style="padding:6px" id="pb">—</div>
           <div class="k">${icon("book")}Usado em</div><div class="v" style="padding:6px">${usadas.length ? usadas.map((r) => `<span class="tag green" style="margin:0 4px 4px 0">${esc(r.nome)}</span>`).join("") : '<span class="faint">Nenhuma ficha</span>'}</div>
         </div>
         <div class="err" id="pe"></div>
-        <div class="row" style="justify-content:space-between">
-          <button class="btn primary" type="submit">Salvar</button>
+        <div class="row sheet-actions" style="justify-content:space-between;flex-wrap:nowrap">
           ${id ? `<button class="btn danger" type="button" id="pd">Excluir</button>` : ""}
+          <button class="btn primary" type="submit" style="min-width:140px">Salvar</button>
         </div>
         ${id ? `<div id="ph"></div>` : ""}
       </form></div>`);
@@ -376,7 +561,7 @@
   }
 
   function modalImportar() {
-    const m = overlay(`<div class="modal" role="dialog" aria-modal="true">
+    const m = overlay(`<div class="modal" role="dialog" aria-modal="true"><div class="sheet-grab"></div>
       <h2>Importar lista de insumos</h2>
       <p class="muted small" style="margin:0 0 10px">Um item por linha: <b>nome, quantidade+unidade, preço</b>. Insumos com o mesmo nome têm o preço atualizado.</p>
       <textarea class="input" id="il" rows="8" placeholder="Arroz, 1kg, R$3,60&#10;Leite integral, 1L, 4,89&#10;Ovo, 12un, 9,90" autofocus></textarea>
@@ -408,10 +593,11 @@
     $("#view").innerHTML = `<div class="page wide">
       ${pageHead("book", "Fichas técnicas", "Cada ficha usa os preços atuais dos seus insumos. Quando um preço muda, o custo e o preço sugerido se atualizam sozinhos.")}
       ${avisoBloqueio()}${!avisoBloqueio() && cheio ? `<div class="callout yellow">${icon("info")}<div class="ct">Você está usando ${S.receitas.length} de ${lim} fichas do plano Free. <a href="#plano">Assine o Pro</a> para criar sem limite.</div></div>` : ""}
-      <div class="db-toolbar"><span class="view">${icon("grid")}Galeria</span><span class="spacer"></span>
-        <input class="search" id="q" type="search" placeholder="Buscar…" value="${esc(S.qRec)}" aria-label="Buscar ficha">
-        <button class="btn primary" id="nova">${icon("plus")}Nova</button></div>
+      <div class="db-toolbar"><span class="view">${icon("grid")}${S.receitas.length} ficha${S.receitas.length === 1 ? "" : "s"}</span><span class="spacer"></span>
+        <div class="search-wrap">${icon("search")}<input class="search" id="q" type="search" placeholder="Buscar…" value="${esc(S.qRec)}" aria-label="Buscar ficha"></div>
+        <button class="btn primary desktop-only" id="nova">${icon("plus")}Nova</button></div>
       <div class="gallery">
+        ${!S.receitas.length ? `<div class="empty-state mobile-only" style="grid-column:1/-1"><div class="ill c-fic">${icon("book")}</div><h3>Nenhuma ficha ainda</h3><p>Toque no + para montar a primeira ficha técnica com os seus insumos.</p></div>` : ""}
         ${list.map((r) => {
           if (r.bloqueado) return `<button class="gcard locked" data-bloq="1" data-id="${r.id}">
             <div class="cover"><span>${icon("lock").replace("<svg", '<svg style="width:26px;height:26px"')}</span></div>
@@ -422,7 +608,7 @@
           const c = C.calcRecipe(r, S.insMap);
           const over = c.venda > 0 && c.cmvReal > r.cmvAlvo / 100;
           return `<button class="gcard" data-id="${r.id}">
-            <div class="cover"><span>${brl(c.porcao)}</span></div>
+            <div class="cover ${over || c.errs ? "warn" : ""}"><span>${brl(c.porcao)}</span><small>por ${esc(singular(r.unidadeRend))}</small></div>
             <div class="body"><div class="t">${esc(r.nome)}</div>
               <div class="row" style="gap:4px">${r.categoria ? `<span class="tag orange">${esc(r.categoria)}</span>` : ""}${c.errs ? `<span class="tag red">${c.errs} pendência</span>` : ""}${c.venda > 0 ? `<span class="tag ${over ? "red" : "green"}">CMV ${pct(c.cmvReal)}</span>` : ""}</div>
               <div class="prop"><span>Custo total</span><b>${brl(c.total)}</b></div>
@@ -430,14 +616,11 @@
               <div class="prop"><span>Preço sugerido</span><b>${brl(c.sugerido)}</b></div>
             </div></button>`;
         }).join("")}
-        <button class="gcard new" id="novaCard">${S.receitas.length ? "+ Nova ficha técnica" : S.insumos.length ? "+ Criar sua primeira ficha técnica" : "Cadastre insumos primeiro"}</button>
+        <button class="gcard new desktop-only" id="novaCard">${S.receitas.length ? "+ Nova ficha técnica" : S.insumos.length ? "+ Criar sua primeira ficha técnica" : "Cadastre insumos primeiro"}</button>
       </div></div>`;
-    const nova = () => {
-      if (!S.insumos.length) { location.hash = "#insumos"; toast("Cadastre ao menos um insumo antes de montar a ficha."); return; }
-      if (cheio) return upsell(`O plano Free permite até ${lim} fichas técnicas. Assine o Pro para criar sem limite.`);
-      location.hash = "#ficha/nova";
-    };
+    const nova = novaFicha;
     $("#nova").onclick = nova; $("#novaCard").onclick = nova;
+    setFab(nova, "Nova ficha técnica");
     $$(".gcard[data-id]").forEach((b) => b.addEventListener("click", () => { if (b.dataset.bloq) upsell(MSG_FICHA_BLOQ); else location.hash = `#ficha/${b.dataset.id}`; }));
     $("#q").addEventListener("input", (e) => { S.qRec = e.target.value; const pos = e.target.selectionStart; viewFichas(); const n = $("#q"); n.focus(); n.setSelectionRange(pos, pos); });
   }
@@ -458,15 +641,15 @@
       return `<option value="${i.id}" ${i.id === sel ? "selected" : ""} ${off ? "disabled" : ""}>${esc(i.nome)}${i.bloqueado ? " (bloqueado)" : ""}</option>`;
     }).join("");
     const unitOpts = (fam, sel) => C.FAM_UNITS[fam].map((u) => `<option ${u === sel ? "selected" : ""}>${u}</option>`).join("");
-    $("#topActions").innerHTML = `<span class="small faint" id="saveState"></span>${id ? `<button class="btn ghost danger" id="del">Excluir</button>` : ""}<button class="btn primary" id="save">Salvar</button>`;
+    $("#topActions").innerHTML = `<span class="small faint desktop-only" id="saveState"></span>${id ? `<button class="btn ghost danger" id="del">Excluir</button>` : ""}<button class="btn primary desktop-only" id="save">Salvar</button>`;
     $("#view").innerHTML = `<div class="page">
       <div class="page-icon">${icon("book")}</div>
       <input class="title-input" id="fn" placeholder="Nome da receita" value="${esc(r.nome)}" aria-label="Nome da receita">
       <div class="props">
         <div class="k">${icon("tag")}Categoria</div><div class="v"><input class="input" id="fcat" placeholder="Vazio" value="${esc(r.categoria)}"></div>
-        <div class="k">${icon("hash")}Rendimento</div><div class="v row" style="flex-wrap:nowrap"><input class="input" id="frend" inputmode="decimal" style="max-width:100px" value="${fmt(r.rendimento, 2)}"><input class="input" id="frendu" placeholder="porções" value="${esc(r.unidadeRend)}"></div>
-        <div class="k">${icon("percent")}CMV alvo</div><div class="v row" style="flex-wrap:nowrap"><input class="input" id="fcmv" inputmode="decimal" style="max-width:100px" value="${fmt(r.cmvAlvo, 1)}"><span class="muted">%</span></div>
-        <div class="k">${icon("coin")}Preço de venda</div><div class="v"><input class="input" id="fven" inputmode="decimal" placeholder="Opcional" value="${r.precoVenda ? fmt(r.precoVenda, 2) : ""}" style="max-width:160px"></div>
+        <div class="k">${icon("hash")}Rendimento</div><div class="v row" style="flex-wrap:nowrap"><input class="input" id="frend" inputmode="decimal" style="max-width:100px" value="${fin(r.rendimento, 2)}"><input class="input" id="frendu" placeholder="porções" value="${esc(r.unidadeRend)}"></div>
+        <div class="k">${icon("percent")}CMV alvo</div><div class="v row" style="flex-wrap:nowrap"><input class="input" id="fcmv" inputmode="decimal" style="max-width:100px" value="${fin(r.cmvAlvo, 1)}"><span class="muted">%</span></div>
+        <div class="k">${icon("coin")}Preço de venda</div><div class="v"><input class="input" id="fven" inputmode="decimal" placeholder="Opcional" value="${r.precoVenda ? fin(r.precoVenda, 2) : ""}" style="max-width:160px"></div>
       </div>
       <div class="callout" id="tot"></div>
       <div class="h2">Ingredientes</div>
@@ -478,7 +661,8 @@
       <textarea class="input" id="fprep" rows="6" placeholder="Descreva o passo a passo…" style="background:none">${esc(r.preparo)}</textarea>
       <div class="err" id="ferr" style="margin-top:10px"></div>
       ${id ? `<p class="faint small">Criada em ${dataBR(orig.criadoEm)} · editada em ${dataHoraBR(orig.atualizadoEm)}</p>` : ""}
-    </div>`;
+    </div>
+    <div class="save-bar"><div class="sb-total"><small id="sbLbl">Custo por porção</small><b id="sbVal">—</b></div><button class="btn primary" id="save2">Salvar</button></div>`;
     const lines = $("#lines");
     const addLine = (l = { insumoId: "", qtd: "", unidade: "g", fc: 1 }) => {
       const ins = S.insMap[l.insumoId];
@@ -486,9 +670,9 @@
       const row = document.createElement("div");
       row.className = "ing";
       row.innerHTML = `<select class="input sel" aria-label="Insumo">${insOpts(l.insumoId)}</select>
-        <input class="input q" inputmode="decimal" placeholder="0" aria-label="Quantidade" value="${l.qtd !== "" ? fmt(l.qtd, 3) : ""}">
-        <select class="input u" aria-label="Unidade">${unitOpts(fam, l.unidade)}</select>
-        <input class="input fc" inputmode="decimal" aria-label="Fator de correção" value="${fmt(l.fc || 1, 3)}">
+        <label class="fl"><span>Qtd.</span><input class="input q" inputmode="decimal" placeholder="0" aria-label="Quantidade" value="${l.qtd !== "" ? fin(l.qtd, 3) : ""}"></label>
+        <label class="fl"><span>Unid.</span><select class="input u" aria-label="Unidade">${unitOpts(fam, l.unidade)}</select></label>
+        <label class="fl"><span>FC</span><input class="input fc" inputmode="decimal" aria-label="Fator de correção" value="${fin(l.fc || 1, 3)}"></label>
         <span class="cost">—</span>
         <button class="icon-btn rm" type="button" aria-label="Remover ingrediente">${icon("x")}</button>`;
       $(".sel", row).addEventListener("change", (e) => {
@@ -513,6 +697,8 @@
         $(".cost", row).innerHTML = !L.insumoId ? '<span class="faint">—</span>' : L.err ? `<span class="tag red">${L.err}</span>` : brl(L.cost);
       });
       const over = c.venda > 0 && c.cmvReal > (f.cmvAlvo || 30) / 100;
+      $("#sbLbl").textContent = `Custo por ${singular(f.unidadeRend)} · sugerido ${brl(c.sugerido)}`;
+      $("#sbVal").textContent = brl(c.porcao);
       $("#tot").innerHTML = `${icon("bulb")}<div class="ct"><div class="totals">
         <div><span>Custo total</span><b>${brl(c.total)}</b></div>
         <div><span>Custo por ${esc(singular(f.unidadeRend))}</span><b>${brl(c.porcao)}</b></div>
@@ -520,14 +706,14 @@
         <div><span>CMV praticado</span><b class="${over ? "up" : ""}">${c.venda > 0 ? pct(c.cmvReal) : "—"}</b></div>
       </div></div>`;
     }
-    const sujo = () => { S.dirty = true; $("#saveState").textContent = "Alterações não salvas"; };
+    const sujo = () => { S.dirty = true; $("#saveState").textContent = "Alterações não salvas"; $("#save2").textContent = "Salvar •"; };
     (r.itens.length ? r.itens : [undefined, undefined]).forEach((l) => addLine(l));
-    $("#addLine").onclick = () => { addLine(); $(".sel", lines.lastElementChild).focus(); };
+    $("#addLine").onclick = () => { addLine(); const s2 = $(".sel", lines.lastElementChild); s2.scrollIntoView({ block: "center", behavior: "smooth" }); s2.focus(); };
     const page = $("#view .page");
     page.addEventListener("input", () => { sujo(); recompute(); });
     page.addEventListener("change", () => { sujo(); recompute(); });
     recompute();
-    if (!id) $("#fn").focus();
+    if (!id && window.innerWidth > 860) $("#fn").focus();
 
     async function salvar() {
       const f = ler(); f.itens = f.itens.filter((l) => l.insumoId);
@@ -541,10 +727,10 @@
         toast(`Ficha <b>${esc(res.receita.nome)}</b> salva.`);
         await atualizarMe();
         if (!id) { lastHash = `#ficha/${res.receita.id}`; location.hash = lastHash; }
-        else { $("#saveState").textContent = "Salvo"; crumb(`Fichas técnicas / ${res.receita.nome}`); }
+        else { $("#saveState").textContent = "Salvo"; $("#save2").textContent = "Salvo"; crumb(`Fichas técnicas / ${res.receita.nome}`); }
       } catch (ex) { tratarErro(ex, err); }
     }
-    $("#save").onclick = salvar;
+    $("#save").onclick = salvar; $("#save2").onclick = salvar;
     page.addEventListener("keydown", (e) => { if ((e.metaKey || e.ctrlKey) && e.key === "s") { e.preventDefault(); salvar(); } });
     if (id) armar($("#del"), "Confirmar exclusão", async () => {
       try { await api("DELETE", `/api/receitas/${id}`); S.receitas = S.receitas.filter((x) => x.id !== id); S.dirty = false; toast("Ficha excluída."); await atualizarMe(); location.hash = "#fichas"; }
@@ -558,7 +744,7 @@
     const head = pageHead("history", "Histórico de preços", "Cada alteração de preço dos seus insumos, com a variação e o efeito no custo das fichas técnicas.");
     if (!isPro()) {
       $("#view").innerHTML = `<div class="page">${head}
-        <div class="callout blue">${icon("lock")}<div class="ct"><b>Disponível no plano Pro</b><p style="margin:4px 0 12px">Acompanhe quanto cada insumo subiu ou caiu ao longo do tempo e veja o impacto no custo das suas receitas. Suas alterações já estão sendo registradas: ao assinar, o histórico aparece completo.</p><button class="btn primary" id="go">Assinar Pro · R$ ${fmt(S.me.preco, 2)}/mês</button></div></div></div>`;
+        <div class="callout blue">${icon("lock")}<div class="ct"><b>Disponível no plano Pro</b><p style="margin:4px 0 12px">Acompanhe quanto cada insumo subiu ou caiu ao longo do tempo e veja o impacto no custo das suas receitas. Suas alterações já estão sendo registradas: ao assinar, o histórico aparece completo.</p><button class="btn primary" id="go">${ofertaAtiva() ? `Pro por R$ ${fmt(precoOferta(), 2)} no 1º mês` : `Assinar Pro · R$ ${fmt(S.me.preco, 2)}/mês`}</button></div></div></div>`;
       $("#go").onclick = () => { location.hash = "#plano"; };
       return;
     }
@@ -608,13 +794,13 @@
         : "";
     $("#view").innerHTML = `<div class="page">${pageHead("card", "Plano e assinatura", "")}${estado}
       <div class="plans">
-        <div class="plan ${!isPro() ? "current" : ""}"><div class="row" style="justify-content:space-between"><b>Free</b>${!isPro() ? '<span class="tag blue">Seu plano</span>' : ""}</div>
+        <div class="plan ${!isPro() ? "current" : ""}"><div class="row" style="justify-content:space-between"><b>Free</b>${!isPro() ? '<span class="tag green">Seu plano</span>' : ""}</div>
           <div class="price">R$ 0</div>
           <ul><li>${icon("check")}Até 10 insumos</li><li>${icon("check")}Até 2 fichas técnicas</li><li>${icon("check")}Recálculo automático das fichas</li><li class="no">${icon("minus")}Histórico de preços</li></ul></div>
-        <div class="plan ${isPro() ? "current" : ""}"><div class="row" style="justify-content:space-between"><b>Pro</b>${isPro() ? '<span class="tag blue">Seu plano</span>' : ""}</div>
-          <div class="price">R$ ${fmt(me.preco, 2)} <small>/ mês</small></div>
+        <div class="plan ${isPro() ? "current" : ofertaAtiva() ? "featured" : ""}">${!isPro() && ofertaAtiva() ? '<span class="ribbon">Oferta de boas-vindas</span>' : ""}<div class="row" style="justify-content:space-between"><b>Pro</b>${isPro() ? '<span class="tag green">Seu plano</span>' : ""}</div>
+          ${!isPro() && ofertaAtiva() ? `<div class="price"><s>R$ ${fmt(me.preco, 2)}</s>R$ ${fmt(precoOferta(), 2)} <small>nos primeiros ${me.oferta.dias} dias</small></div><span class="small muted" style="margin-top:-6px">Depois, R$ ${fmt(me.preco, 2)}/mês. Só para a primeira assinatura.</span>` : `<div class="price">R$ ${fmt(me.preco, 2)} <small>/ mês</small></div>`}
           <ul><li>${icon("check")}Insumos ilimitados</li><li>${icon("check")}Fichas técnicas ilimitadas</li><li>${icon("check")}Recálculo automático das fichas</li><li>${icon("check")}Histórico de preços dos insumos</li></ul>
-          <a class="btn primary block" href="${linkSuporte(motivoPro())}" target="_blank" rel="noopener">${isPro() || me.vencido ? "Renovar pelo WhatsApp" : "Assinar pelo WhatsApp"}</a>
+          <a class="btn ${!isPro() && ofertaAtiva() ? "accent" : "primary"} block" href="${linkSuporte(motivoPro())}" target="_blank" rel="noopener">${icon("chat")}${isPro() || me.vencido ? "Renovar pelo WhatsApp" : ofertaAtiva() ? `Assinar por R$ ${fmt(precoOferta(), 2)} pelo WhatsApp` : "Assinar pelo WhatsApp"}</a>
           <span class="small faint">O pagamento é combinado com o suporte no WhatsApp ${esc(telSuporte())}. Assim que for confirmado, o Pro é liberado na sua conta por 30 dias.</span></div>
       </div>
       <div class="callout">${icon("info")}<div class="ct small">Ao abrir o WhatsApp, a mensagem já vai com o seu e-mail de cadastro (${esc(me.email)}) para o suporte localizar sua conta.</div></div>

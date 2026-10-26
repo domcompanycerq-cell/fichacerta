@@ -179,7 +179,7 @@ app.post("/api/auth/redefinir", h(async (req, res) => {
 /* ---------------- conta ---------------- */
 // Dados públicos para a tela de login (nome do app e WhatsApp do suporte).
 app.get("/api/config", (req, res) => {
-  res.json({ appName: notif.APP_NAME, suporteWhatsApp: notif.SUPORTE_WHATSAPP, preco: planos.PRECO_PRO });
+  res.json({ appName: notif.APP_NAME, suporteWhatsApp: notif.SUPORTE_WHATSAPP, preco: planos.PRECO_PRO, precoOferta: planos.PRECO_OFERTA, diasOferta: planos.DIAS_OFERTA });
 });
 
 app.get("/api/me", h(async (req, res) => {
@@ -437,7 +437,7 @@ admin.use(auth.exigirAdmin);
 const logAdmin = (req, userId, acao, detalhe = "") =>
   run("INSERT INTO admin_log (admin_id, user_id, acao, detalhe, criado_em) VALUES ($1,$2,$3,$4,$5)", req.user.id, userId, acao, detalhe, now());
 
-const SQL_USUARIOS = `SELECT u.id, u.nome, u.email, u.telefone, u.role, u.plano, u.pro_ate, u.status, u.motivo_bloqueio, u.criado_em, u.ultimo_acesso,
+const SQL_USUARIOS = `SELECT u.id, u.nome, u.email, u.telefone, u.role, u.plano, u.pro_ate, u.status, u.motivo_bloqueio, u.criado_em, u.ultimo_acesso, u.oferta_usada,
   (SELECT COUNT(*) FROM insumos i WHERE i.user_id = u.id)::int AS n_insumos,
   (SELECT COUNT(*) FROM receitas r WHERE r.user_id = u.id)::int AS n_receitas,
   (SELECT COALESCE(SUM(valor),0) FROM pagamentos p WHERE p.user_id = u.id AND p.status IN ('aprovado','manual'))::float AS total_pago
@@ -448,6 +448,7 @@ function adminUserOut(u) {
     id: u.id, nome: u.nome, email: u.email, telefone: u.telefone, role: u.role, status: u.status, motivoBloqueio: u.motivo_bloqueio,
     plano: ativoPro ? "pro" : "free", vencido: u.plano === "pro" && !ativoPro, proAte: u.pro_ate, diasRestantes: planos.diasRestantes(u),
     criadoEm: u.criado_em, ultimoAcesso: u.ultimo_acesso, insumos: u.n_insumos, receitas: u.n_receitas, totalPago: u.total_pago,
+    ofertaDisponivel: planos.ofertaDisponivel(u),
   };
 }
 async function filtrarUsuarios(filtro, dias = 7) {
@@ -485,6 +486,7 @@ admin.get("/resumo", h(async (req, res) => {
     receita30,
     cadastrosPorDia: Object.entries(porDia).map(([dia, n]) => ({ dia, n })),
     preco: planos.PRECO_PRO,
+    precoOferta: planos.PRECO_OFERTA,
     suporteWhatsApp: notif.SUPORTE_WHATSAPP,
     emailAtivo: notif.emailAtivo,
   });
@@ -543,9 +545,13 @@ admin.post("/usuarios/:id/pro", h(async (req, res) => {
     await planos.definirProAte(u.id, ate);
   } else {
     const dias = Math.max(1, Math.min(3660, parseInt(req.body.dias, 10) || 30));
+    // Primeira assinatura: os primeiros 30 dias saem pelo preço da oferta; o restante, pelo preço normal.
+    const comOferta = planos.ofertaDisponivel(u);
+    const meses = Math.max(1, Math.round(dias / 30));
+    const valor = comOferta ? planos.PRECO_OFERTA + planos.PRECO_PRO * (meses - 1) : planos.PRECO_PRO * meses;
     ate = await planos.estenderPro(u.id, dias);
     if (req.body.registrarPagamento) await run("INSERT INTO pagamentos (user_id, valor, status, provider, dias, criado_em, aprovado_em) VALUES ($1,$2,$3,$4,$5,$6,$7)",
-      u.id, planos.PRECO_PRO * Math.max(1, Math.round(dias / 30)), "manual", "whatsapp", dias, now(), now());
+      u.id, valor, "manual", comOferta ? "whatsapp-oferta" : "whatsapp", dias, now(), now());
   }
   await logAdmin(req, u.id, "pro", `até ${ate.slice(0, 10)}`);
   await notif.notificar(u.id, "Plano Pro ativo", `Seu plano Pro está ativo até ${new Date(ate).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}. Insumos e fichas ilimitados e histórico de preços liberados.`, { tipo: "sistema", email: true });

@@ -259,3 +259,26 @@ test("segurança: cookie, cache, origem e troca de senha", async () => {
   assert.match(h.get("content-security-policy"), /frame-ancestors 'none'/);
   assert.equal(h.get("x-frame-options"), "DENY");
 });
+
+test("oferta: primeiro mês do Pro por R$ 10, só na primeira assinatura", async () => {
+  const { c, id } = await novoUsuario("oferta@x.com");
+  const cfg = (await cliente()("GET", "/api/config")).body;
+  assert.equal(cfg.precoOferta, 10);
+  assert.deepEqual((await c("GET", "/api/me")).body.user.oferta, { disponivel: true, preco: 10, dias: 30 });
+  const a = cliente();
+  await a("POST", "/api/auth/login", { email: "admin@teste.com", senha: "admin-senha-123" });
+  const det0 = (await a("GET", `/api/admin/usuarios/${id}`)).body;
+  assert.equal(det0.usuario.ofertaDisponivel, true);
+  await a("POST", `/api/admin/usuarios/${id}/pro`, { dias: 30, registrarPagamento: true });
+  assert.equal((await c("GET", "/api/me")).body.user.oferta.disponivel, false);
+  // vence e renova: preço normal
+  await run("UPDATE users SET pro_ate = $1 WHERE id = $2", new Date(Date.now() - 864e5).toISOString(), id);
+  assert.equal((await c("GET", "/api/me")).body.user.oferta.disponivel, false, "oferta não volta após vencer");
+  await a("POST", `/api/admin/usuarios/${id}/pro`, { dias: 30, registrarPagamento: true });
+  const pags = (await c("GET", "/api/assinatura")).body.pagamentos.map((p) => p.valor).sort((x, y) => x - y);
+  assert.deepEqual(pags, [10, 25]);
+  // primeira assinatura de 90 dias: R$ 10 + 2 × R$ 25
+  const u2 = await novoUsuario("oferta90@x.com");
+  await a("POST", `/api/admin/usuarios/${u2.id}/pro`, { dias: 90, registrarPagamento: true });
+  assert.deepEqual((await u2.c("GET", "/api/assinatura")).body.pagamentos.map((p) => p.valor), [60]);
+});
