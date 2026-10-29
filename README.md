@@ -1,8 +1,9 @@
-# Ficha Certa
+# CMV Certo
 
 App web (instalável no celular) para cozinhas: o usuário cadastra insumos (nome, embalagem, preço), monta fichas técnicas, e o custo de cada receita se recalcula sozinho quando um preço muda. Tem planos Free e Pro (pagos pelo WhatsApp do suporte) e um painel administrativo.
 
-> "Ficha Certa" é um nome provisório. Troque em `APP_NAME` e em `public/manifest.webmanifest`.
+> Marca, cores, fontes e logo estão no manual em `brand/cmv-certo-brandbook.html` (arquivos em `brand/logo` e `brand/icons`). O nome exibido vem de `APP_NAME` e de `public/manifest.webmanifest`.
+> Fotos: Unsplash (licença livre), listadas em `public/img/CREDITOS.md`. Fontes: Archivo, Figtree e IBM Plex Mono (SIL Open Font License), servidas de `public/fonts`.
 
 ## Funcionalidades
 
@@ -50,6 +51,8 @@ public/              telas (servidas pela CDN da Vercel)
   admin.html, admin.js painel administrativo
   calc.js              cálculo das fichas (usado no navegador e no servidor)
   manifest.webmanifest, sw.js, icons/   instalação no celular
+  img/, fonts/         fotos (Unsplash) e fontes da marca, servidas pelo próprio app
+brand/               manual de marca, logo e ícones originais
 vercel.json          tarefa diária, rota /admin e cabeçalhos de segurança
 test/api.test.js     testes automáticos
 ```

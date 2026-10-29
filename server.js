@@ -1,5 +1,5 @@
 "use strict";
-// Servidor do Ficha Certa. Na Vercel este arquivo é a função (exporta o app Express);
+// Servidor do CMV Certo. Na Vercel este arquivo é a função (exporta o app Express);
 // no computador, `npm start` sobe o mesmo app na porta 3000.
 const path = require("node:path");
 const crypto = require("node:crypto");
@@ -609,9 +609,9 @@ app.use("/api", (req, res) => erro(res, 404, "Rota não encontrada."));
 const PUBLIC = path.join(__dirname, "public");
 app.use(express.static(PUBLIC, {
   extensions: ["html"],
-  // Mesmas regras de cache do vercel.json: páginas e código sempre revalidados, ícones guardados por 1 semana.
+  // Mesmas regras de cache do vercel.json: páginas e código sempre revalidados, ícones, fotos e fontes guardados por 1 semana.
   setHeaders: (res, arquivo) => {
-    if (arquivo.includes(`${path.sep}icons${path.sep}`)) res.setHeader("Cache-Control", "public, max-age=604800");
+    if (["icons", "img", "fonts"].some((d) => arquivo.includes(`${path.sep}${d}${path.sep}`))) res.setHeader("Cache-Control", "public, max-age=604800");
     else if (/\.html$|sw\.js$/.test(arquivo)) res.setHeader("Cache-Control", "no-cache");
     else res.setHeader("Cache-Control", "public, max-age=0, must-revalidate");
   },

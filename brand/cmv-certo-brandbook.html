@@ -1,0 +1,551 @@
+<title>Marca CMV Certo</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=Figtree:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: manual de marca em uma coluna larga; cada seção abre com rótulo de comanda e fecha com a aplicação real */
+:root {
+  --salsa: #17694A;        /* verde principal */
+  --salsa-escuro: #0F4A33;
+  --salsa-claro: #E2F0E8;
+  --paprica: #E0582A;      /* destaque / alerta */
+  --manteiga: #F3C845;     /* check, realce de número */
+  --inox: #F3F5F1;         /* fundo */
+  --carvao: #18211C;       /* texto */
+
+  --bg: var(--inox);
+  --surface: #FFFFFF;
+  --ink: var(--carvao);
+  --muted: #5B675F;
+  --line: #DCE2DB;
+  --brand: var(--salsa);
+  --brand-text: var(--salsa);
+  --accent: var(--paprica);
+  --logo-c: var(--salsa);
+  --logo-k: var(--paprica);
+  --ok: #17694A; --ok-bg: #E2F0E8;
+  --warn: #7A5A05; --warn-bg: #FBF0C9;
+  --bad: #B23E16; --bad-bg: #FBE4DA;
+
+  --f-display: "Archivo", "Arial Narrow", system-ui, sans-serif;
+  --f-body: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --r: 14px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0F1512; --surface: #18201B; --ink: #E8EEE9; --muted: #9AA79F; --line: #2A352E;
+    --brand-text: #4FB383; --accent: #F07446; --logo-c: #FFFFFF; --logo-k: var(--manteiga);
+    --salsa-claro: #1C3328;
+    --ok: #5CC290; --ok-bg: #173226; --warn: #F3C845; --warn-bg: #352C10; --bad: #F58A63; --bad-bg: #3A1D12;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0F1512; --surface: #18201B; --ink: #E8EEE9; --muted: #9AA79F; --line: #2A352E;
+  --brand-text: #4FB383; --accent: #F07446; --logo-c: #FFFFFF; --logo-k: var(--manteiga);
+  --salsa-claro: #1C3328;
+  --ok: #5CC290; --ok-bg: #173226; --warn: #F3C845; --warn-bg: #352C10; --bad: #F58A63; --bad-bg: #3A1D12;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 16px/1.6 var(--f-body); }
+.wrap { max-width: 1080px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1, h2, h3 { font-family: var(--f-display); font-variation-settings: "wdth" 112; line-height: 1.05; text-wrap: balance; margin: 0; }
+h2 { font-size: clamp(30px, 5vw, 48px); font-weight: 800; letter-spacing: -0.01em; }
+h3 { font-size: 20px; font-weight: 700; }
+p { margin: 0; max-width: 64ch; }
+.muted { color: var(--muted); }
+.mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+
+/* rótulo estilo comanda */
+.tag { display: inline-flex; gap: 10px; align-items: center; font: 500 12px/1 var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.tag b { color: var(--accent); font-weight: 600; }
+
+section { padding-block: 72px; border-top: 1px solid var(--line); }
+.sec-head { display: grid; gap: 14px; margin-bottom: 36px; }
+.grid { display: grid; gap: 16px; }
+.g2 { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.g3 { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 22px; min-width: 0; display: grid; gap: 10px; align-content: start; }
+
+/* ===== capa ===== */
+.hero { padding-block: 56px 72px; display: grid; gap: 40px; }
+.hero-top { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.lockup { display: flex; align-items: center; gap: .32em; font-size: clamp(56px, 12vw, 132px); }
+.lockup svg { width: 1.05em; height: 1.05em; flex: none; }
+.wm { font-family: var(--f-display); font-variation-settings: "wdth" 115; line-height: .9; letter-spacing: -0.025em; white-space: nowrap; }
+.wm .a { font-weight: 850; color: var(--ink); }
+.wm .b { font-weight: 500; color: var(--brand-text); }
+.hero .claim { font: 600 clamp(22px, 3.2vw, 32px)/1.25 var(--f-body); max-width: 26ch; }
+.hero-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); overflow: hidden; }
+.hero-strip > div { padding: 18px 20px; border-right: 1px dashed var(--line); display: grid; gap: 4px; }
+.hero-strip > div:last-child { border-right: 0; }
+.hero-strip .k { font: 500 11px/1 var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.hero-strip .v { font-weight: 600; }
+
+/* ===== logo ===== */
+.logo-stage { border-radius: var(--r); display: grid; place-items: center; min-height: 220px; padding: 28px; border: 1px solid var(--line); }
+.st-light { background: #FFFFFF; --logo-c: #17694A; --logo-k: #E0582A; }
+.st-light .wm .a { color: #18211C; } .st-light .wm .b { color: #17694A; }
+.st-dark { background: #0F4A33; border-color: #0F4A33; --logo-c: #FFFFFF; --logo-k: #F3C845; }
+.st-dark .wm .a { color: #FFFFFF; } .st-dark .wm .b { color: #F3C845; }
+.st-mono { background: #FFFFFF; --logo-c: #18211C; --logo-k: #18211C; }
+.st-mono .wm .a, .st-mono .wm .b { color: #18211C; }
+.st-paprica { background: #E0582A; border-color: #E0582A; --logo-c: #FFFFFF; --logo-k: #18211C; }
+.st-paprica .wm .a, .st-paprica .wm .b { color: #FFFFFF; }
+.logo-stage { min-width: 0; overflow: hidden; }
+.logo-stage .lockup { font-size: clamp(28px, 3.6vw, 42px); }
+.logos { grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); }
+.clear-box { border: 1.5px dashed var(--accent); padding: 22px; border-radius: 4px; }
+.clear-box .lockup { font-size: 44px; outline: 1px solid var(--line); }
+.caption { font-size: 14px; color: var(--muted); }
+.caption b { color: var(--ink); font-weight: 600; }
+
+.anatomy { display: grid; grid-template-columns: minmax(0, 300px) 1fr; gap: 32px; align-items: center; }
+.anatomy svg { width: 100%; height: auto; }
+.anatomy ol { margin: 0; padding-left: 20px; display: grid; gap: 14px; }
+@media (max-width: 680px) { .anatomy { grid-template-columns: 1fr; } }
+
+.rules { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.rule { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: grid; gap: 10px; font-size: 13px; }
+.rule .box { height: 90px; display: grid; place-items: center; background: #FFFFFF; border-radius: 8px; overflow: hidden; --logo-c: #17694A; --logo-k: #E0582A; }
+.rule .box svg { width: 60px; height: 60px; }
+.rule .x { color: var(--bad); font-weight: 600; }
+
+.clear { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 24px; display: grid; place-items: center; overflow-x: auto; }
+
+/* ===== cores ===== */
+.swatches { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.sw { border-radius: var(--r); overflow: hidden; border: 1px solid var(--line); background: var(--surface); display: grid; grid-template-rows: 120px auto; }
+.sw .chip { padding: 14px; display: flex; align-items: flex-end; font: 700 22px/1 var(--f-display); font-variation-settings: "wdth" 112; }
+.sw .info { padding: 14px; display: grid; gap: 4px; font-size: 13px; }
+.sw .info .mono { font-size: 13px; }
+.sw button { all: unset; cursor: pointer; font: 500 12px var(--f-mono); color: var(--brand-text); }
+.sw button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.prop { display: flex; height: 26px; border-radius: 8px; overflow: hidden; margin-top: 18px; }
+.prop span { display: block; }
+
+.semaforo { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-top: 16px; }
+.sem { border-radius: var(--r); padding: 18px; display: grid; gap: 6px; }
+.sem .faixa { font: 600 28px/1 var(--f-mono); }
+.s-ok { background: var(--ok-bg); color: var(--ok); }
+.s-warn { background: var(--warn-bg); color: var(--warn); }
+.s-bad { background: var(--bad-bg); color: var(--bad); }
+.sem p { color: var(--ink); font-size: 14px; }
+
+/* ===== tipografia ===== */
+.type-row { display: grid; grid-template-columns: 200px 1fr; gap: 24px; padding-block: 26px; border-bottom: 1px dashed var(--line); align-items: baseline; }
+.type-row:last-child { border-bottom: 0; }
+.type-row .meta { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+.type-row .meta b { color: var(--ink); font-size: 15px; }
+.sample { min-width: 0; overflow-wrap: anywhere; }
+.s-display { font: 850 clamp(36px, 6vw, 64px)/1 var(--f-display); font-variation-settings: "wdth" 115; letter-spacing: -0.02em; }
+.s-body { font: 400 18px/1.6 var(--f-body); }
+.s-mono { font: 500 clamp(22px, 3vw, 30px)/1.3 var(--f-mono); }
+@media (max-width: 680px) { .type-row { grid-template-columns: 1fr; gap: 10px; } }
+.scale { display: grid; gap: 8px; margin-top: 20px; }
+.scale div { display: flex; gap: 16px; align-items: baseline; flex-wrap: wrap; }
+.scale .mono { font-size: 12px; color: var(--muted); width: 120px; flex: none; }
+
+/* ===== voz ===== */
+.trait h3 { color: var(--brand-text); }
+.voice-table { width: 100%; border-collapse: collapse; font-size: 15px; }
+.voice-table th { text-align: left; font: 500 12px var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.voice-table td { padding: 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.voice-table td:first-child { color: var(--ok); font-weight: 500; }
+.voice-table td:last-child { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--bad); }
+.tbl { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); }
+.glossary { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.glossary span { background: var(--salsa-claro); color: var(--brand-text); border-radius: 999px; padding: 5px 12px; font-size: 14px; font-weight: 500; }
+
+/* ===== aplicações ===== */
+.apps { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; align-items: start; }
+.app-label { margin-top: 10px; }
+
+/* celular */
+.phone { width: 280px; max-width: 100%; margin: 0 auto; aspect-ratio: 9/18.5; border-radius: 36px; background: #0D1310; padding: 10px; }
+.screen { height: 100%; border-radius: 28px; background: #F3F5F1; overflow: hidden; display: grid; grid-template-rows: auto 1fr auto; color: #18211C; font-size: 12px; }
+.scr-top { background: #17694A; color: #fff; padding: 22px 16px 16px; display: grid; gap: 4px; }
+.scr-top .t { font: 800 18px/1.1 var(--f-display); font-variation-settings: "wdth" 110; }
+.scr-top .s { opacity: .8; }
+.scr-body { padding: 12px; display: grid; gap: 4px; align-content: start; }
+.ln { display: flex; justify-content: space-between; gap: 8px; padding: 6px 0; border-bottom: 1px dashed #DCE2DB; font-family: var(--f-mono); font-size: 11px; }
+.ln span:first-child { font-family: var(--f-body); font-size: 12px; }
+.tot { margin-top: 8px; background: #fff; border-radius: 12px; padding: 12px; display: grid; gap: 6px; }
+.tot .row { display: flex; justify-content: space-between; align-items: center; }
+.pill { font: 600 11px var(--f-mono); border-radius: 999px; padding: 3px 8px; background: #E2F0E8; color: #17694A; }
+.scr-tab { display: grid; grid-template-columns: repeat(4, 1fr); text-align: center; background: #fff; border-top: 1px solid #DCE2DB; padding: 10px 4px 14px; font-size: 10px; color: #5B675F; }
+.scr-tab .on { color: #17694A; font-weight: 700; }
+
+/* post instagram */
+.post { aspect-ratio: 4/5; max-width: 100%; border-radius: 16px; background: #17694A; color: #fff; padding: 26px; display: grid; grid-template-rows: auto 1fr auto; overflow: hidden; position: relative; }
+.post .q { font: 850 clamp(26px, 3.6vw, 34px)/1.02 var(--f-display); font-variation-settings: "wdth" 108; letter-spacing: -0.01em; align-self: center; }
+.post .q em { font-style: normal; color: #F3C845; }
+.post .foot { display: flex; justify-content: space-between; align-items: center; font: 500 12px var(--f-mono); opacity: .9; }
+.post .foot .mini { display: flex; align-items: center; gap: 6px; --logo-c: #fff; --logo-k: #F3C845; }
+.post .foot svg { width: 22px; height: 22px; }
+.post .kicker { font: 500 12px var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: #F3C845; }
+
+/* whatsapp */
+.wa { background: #E6DED3; border-radius: 16px; padding: 18px; display: grid; gap: 10px; color: #111; }
+.bubble { background: #fff; border-radius: 10px 10px 10px 2px; padding: 10px 12px; font-size: 14px; line-height: 1.45; max-width: 92%; box-shadow: 0 1px 1px rgba(0,0,0,.08); }
+.bubble.me { background: #D9FDD3; justify-self: end; border-radius: 10px 10px 2px 10px; }
+.bubble small { display: block; text-align: right; color: #667; font-size: 11px; margin-top: 2px; }
+
+/* cartão */
+.bizcard { aspect-ratio: 85/55; max-width: 100%; border-radius: 12px; background: #fff; color: #18211C; padding: 22px; display: grid; grid-template-rows: 1fr auto; border: 1px solid var(--line); --logo-c: #17694A; --logo-k: #E0582A; }
+.bizcard .lockup { font-size: 30px; }
+.bizcard .who { font-size: 13px; display: grid; gap: 2px; }
+.bizcard .who b { font-size: 15px; }
+.bizcard-back { background: #17694A; border-color: #17694A; display: grid; place-items: center; --logo-c: #fff; --logo-k: #F3C845; color: #fff; }
+.bizcard-back svg { width: 64px; height: 64px; }
+
+/* ícones */
+.icons-row { display: flex; gap: 24px; align-items: flex-end; flex-wrap: wrap; }
+.icons-row figure { margin: 0; display: grid; gap: 8px; justify-items: center; font: 500 12px var(--f-mono); color: var(--muted); }
+
+/* mensagens */
+.msg { font: 700 22px/1.2 var(--f-display); font-variation-settings: "wdth" 108; }
+.bio { font-family: var(--f-body); white-space: pre-line; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 18px; font-size: 15px; }
+
+.files { font-family: var(--f-mono); font-size: 13px; line-height: 1.9; overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 18px 20px; white-space: pre; }
+footer { padding-block: 40px 64px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; }
+
+a { color: var(--brand-text); }
+@media (prefers-reduced-motion: no-preference) {
+  .hero .lockup .k-path { stroke-dasharray: 420; stroke-dashoffset: 420; animation: tick .9s .25s cubic-bezier(.6,0,.2,1) forwards; }
+  @keyframes tick { to { stroke-dashoffset: 0; } }
+}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="simbolo" viewBox="0 0 512 512">
+      <path d="M331 126.1 A150 150 0 1 0 397 307.3" fill="none" style="stroke:var(--logo-c)" stroke-width="56" stroke-linecap="round"/>
+      <path d="M180 250 L240 308 L420 128" fill="none" style="stroke:var(--logo-k)" stroke-width="56" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+  </defs>
+</svg>
+
+<div class="wrap">
+
+  <!-- CAPA -->
+  <header class="hero">
+    <div class="hero-top">
+      <span class="tag"><b>●</b> Manual de marca · v1 · out/2026</span>
+      <span class="tag">cmvcerto.com</span>
+    </div>
+    <div class="lockup" role="img" aria-label="CMV certo">
+      <svg viewBox="0 0 512 512" aria-hidden="true">
+        <path d="M331 126.1 A150 150 0 1 0 397 307.3" fill="none" style="stroke:var(--logo-c)" stroke-width="56" stroke-linecap="round"/>
+        <path class="k-path" d="M180 250 L240 308 L420 128" fill="none" style="stroke:var(--logo-k)" stroke-width="56" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span class="wm"><span class="a">CMV</span> <span class="b">certo</span></span>
+    </div>
+    <p class="claim">Cada prato no preço certo.</p>
+    <div class="hero-strip">
+      <div><span class="k">O que é</span><span class="v">App de fichas técnicas e custo de receitas</span></div>
+      <div><span class="k">Para quem</span><span class="v">Restaurantes, lanchonetes, marmitarias e confeitarias</span></div>
+      <div><span class="k">Promessa</span><span class="v">O preço do insumo mudou, o custo do prato muda junto</span></div>
+    </div>
+  </header>
+
+  <!-- ESTRATÉGIA -->
+  <section id="estrategia">
+    <div class="sec-head">
+      <span class="tag"><b>01</b> Estratégia</span>
+      <h2>Por que CMV Certo</h2>
+      <p class="muted">CMV é o Custo da Mercadoria Vendida, o número que diz quanto do preço de um prato vai embora em ingrediente. Todo dono de cozinha já ouviu falar dele, quase ninguém sabe o próprio. A marca nasce para fechar essa conta.</p>
+    </div>
+    <div class="grid g3">
+      <div class="card"><h3>Problema</h3><p>O preço é chutado ou copiado do concorrente. O fornecedor aumenta o queijo e a margem some sem ninguém perceber.</p></div>
+      <div class="card"><h3>Solução</h3><p>Cadastre os insumos uma vez. Monte a ficha técnica. Quando um preço muda, todas as fichas que usam aquele insumo se recalculam.</p></div>
+      <div class="card"><h3>Resultado</h3><p>O dono sabe quanto custa cada porção, qual preço cobrar para bater o CMV alvo e quais pratos estão dando prejuízo.</p></div>
+    </div>
+    <div class="grid g2" style="margin-top:16px">
+      <div class="card">
+        <span class="tag">Posicionamento</span>
+        <p><b>Para</b> donos e chefs de pequenos negócios de comida <b>que</b> precisam saber se cada prato dá lucro, <b>o CMV Certo é</b> o app de ficha técnica <b>que</b> mantém o custo das receitas sempre atualizado, <b>sem</b> planilha e sem curso de finanças.</p>
+      </div>
+      <div class="card">
+        <span class="tag">Sobre o nome</span>
+        <p>Usa o termo que o setor já conhece e diz o resultado, não a ferramenta. "Ficha Certa" falava do documento. "CMV Certo" fala do dinheiro. O "certo" em minúscula deixa o nome com cara de frase dita na cozinha: "o CMV tá certo?".</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- LOGO -->
+  <section id="logo">
+    <div class="sec-head">
+      <span class="tag"><b>02</b> Logo</span>
+      <h2>Prato conferido</h2>
+      <p class="muted">O símbolo junta duas ideias. O arco aberto é a borda de um prato e também o C de custo. O check sai do prato e passa da borda: a conta fechou e sobrou margem.</p>
+    </div>
+
+    <div class="anatomy card">
+      <svg viewBox="0 0 512 512" role="img" aria-label="Construção do símbolo">
+        <circle cx="256" cy="256" r="150" fill="none" stroke="var(--line)" stroke-width="2" stroke-dasharray="6 6"/>
+        <line x1="256" y1="40" x2="256" y2="472" stroke="var(--line)" stroke-width="2" stroke-dasharray="6 6"/>
+        <line x1="40" y1="256" x2="472" y2="256" stroke="var(--line)" stroke-width="2" stroke-dasharray="6 6"/>
+        <use href="#simbolo"/>
+        <circle cx="240" cy="308" r="7" fill="var(--ink)"/>
+        <circle cx="420" cy="128" r="7" fill="var(--ink)"/>
+      </svg>
+      <ol>
+        <li><b>Arco de 280°</b>, raio 150 em grade de 512, traço 56. A abertura fica no canto superior direito, por onde o check sai.</li>
+        <li><b>Check em 45°</b>, mesma espessura do arco. A ponta longa ultrapassa a borda do prato: é o lucro.</li>
+        <li><b>Pontas arredondadas</b> em tudo. A marca é técnica, mas fala com quem trabalha com as mãos.</li>
+        <li><b>Duas cores no máximo.</b> Arco na cor principal, check na cor de destaque.</li>
+      </ol>
+    </div>
+
+    <h3 style="margin:40px 0 16px">Versões</h3>
+    <div class="grid logos">
+      <figure style="margin:0;display:grid;gap:8px">
+        <div class="logo-stage st-light"><div class="lockup"><svg viewBox="0 0 512 512"><use href="#simbolo"/></svg><span class="wm"><span class="a">CMV</span> <span class="b">certo</span></span></div></div>
+        <figcaption class="caption"><b>Principal.</b> Sobre fundo branco ou Inox.</figcaption>
+      </figure>
+      <figure style="margin:0;display:grid;gap:8px">
+        <div class="logo-stage st-dark"><div class="lockup"><svg viewBox="0 0 512 512"><use href="#simbolo"/></svg><span class="wm"><span class="a">CMV</span> <span class="b">certo</span></span></div></div>
+        <figcaption class="caption"><b>Negativa.</b> Sobre Salsa escuro ou fotos escuras.</figcaption>
+      </figure>
+      <figure style="margin:0;display:grid;gap:8px">
+        <div class="logo-stage st-mono"><div class="lockup"><svg viewBox="0 0 512 512"><use href="#simbolo"/></svg><span class="wm"><span class="a">CMV</span> <span class="b">certo</span></span></div></div>
+        <figcaption class="caption"><b>Uma cor.</b> Carimbo, etiqueta térmica, impressão em preto.</figcaption>
+      </figure>
+      <figure style="margin:0;display:grid;gap:8px">
+        <div class="logo-stage st-paprica"><div class="lockup"><svg viewBox="0 0 512 512"><use href="#simbolo"/></svg><span class="wm"><span class="a">CMV</span> <span class="b">certo</span></span></div></div>
+        <figcaption class="caption"><b>Campanha.</b> Só em peças promocionais, nunca no app.</figcaption>
+      </figure>
+    </div>
+
+    <h3 style="margin:40px 0 16px">Ícone do app</h3>
+    <div class="card">
+      <div class="icons-row">
+        <figure><svg width="128" height="128" viewBox="0 0 512 512" style="--logo-c:#fff;--logo-k:#F3C845"><rect width="512" height="512" rx="112" fill="#17694A"/><g transform="translate(51.2 51.2) scale(.8)"><use href="#simbolo"/></g></svg>512 px</figure>
+        <figure><svg width="72" height="72" viewBox="0 0 512 512" style="--logo-c:#fff;--logo-k:#F3C845"><rect width="512" height="512" rx="112" fill="#17694A"/><g transform="translate(51.2 51.2) scale(.8)"><use href="#simbolo"/></g></svg>192 px</figure>
+        <figure><svg width="44" height="44" viewBox="0 0 512 512" style="--logo-c:#fff;--logo-k:#F3C845"><rect width="512" height="512" rx="112" fill="#17694A"/><g transform="translate(51.2 51.2) scale(.8)"><use href="#simbolo"/></g></svg>tela inicial</figure>
+        <figure><svg width="20" height="20" viewBox="0 0 512 512" style="--logo-c:#fff;--logo-k:#F3C845"><rect width="512" height="512" rx="112" fill="#17694A"/><g transform="translate(51.2 51.2) scale(.8)"><use href="#simbolo"/></g></svg>favicon</figure>
+      </div>
+      <p class="caption">O check amarelo continua legível em 16 px. Abaixo disso, use só o símbolo sem o nome.</p>
+    </div>
+
+    <h3 style="margin:40px 0 16px">Área de proteção e tamanho mínimo</h3>
+    <div class="grid g2">
+      <div class="clear">
+        <div class="clear-box"><div class="lockup"><svg viewBox="0 0 512 512"><use href="#simbolo"/></svg><span class="wm"><span class="a">CMV</span> <span class="b">certo</span></span></div></div>
+      </div>
+      <div class="card">
+        <p><b>Margem livre = x</b>, onde x é metade da altura do símbolo. Nada entra nessa área: texto, borda de foto ou outro logo.</p>
+        <p class="mono">Logo completo: mín. 96 px / 25 mm<br>Só o símbolo: mín. 16 px / 5 mm</p>
+      </div>
+    </div>
+
+    <h3 style="margin:40px 0 16px">Não faça</h3>
+    <div class="rules">
+      <div class="rule"><div class="box"><svg viewBox="0 0 512 512" style="transform:rotate(25deg)"><use href="#simbolo"/></svg></div><span class="x">Não gire</span></div>
+      <div class="rule"><div class="box"><svg viewBox="0 0 512 512" style="transform:scaleX(1.5)"><use href="#simbolo"/></svg></div><span class="x">Não distorça</span></div>
+      <div class="rule"><div class="box" style="--logo-c:#7b55c7;--logo-k:#2f6fd6"><svg viewBox="0 0 512 512"><use href="#simbolo"/></svg></div><span class="x">Não troque as cores</span></div>
+      <div class="rule"><div class="box" style="background:#E0582A;--logo-k:#E0582A"><svg viewBox="0 0 512 512"><use href="#simbolo"/></svg></div><span class="x">Não use sem contraste</span></div>
+      <div class="rule"><div class="box"><svg viewBox="0 0 512 512" style="filter:drop-shadow(6px 8px 4px rgba(0,0,0,.45))"><use href="#simbolo"/></svg></div><span class="x">Não aplique sombra</span></div>
+    </div>
+  </section>
+
+  <!-- CORES -->
+  <section id="cores">
+    <div class="sec-head">
+      <span class="tag"><b>03</b> Cores</span>
+      <h2>Cores de cozinha</h2>
+      <p class="muted">Os nomes vêm do que fica na bancada. O verde segue o do app atual, um pouco mais fechado. A páprica marca o que pede atenção. A manteiga destaca o número que importa.</p>
+    </div>
+    <div class="swatches" id="swatches"></div>
+    <div class="prop" aria-label="Proporção de uso das cores">
+      <span style="flex:50;background:#F3F5F1;border:1px solid var(--line)"></span>
+      <span style="flex:22;background:#17694A"></span>
+      <span style="flex:12;background:#18211C"></span>
+      <span style="flex:8;background:#0F4A33"></span>
+      <span style="flex:5;background:#E0582A"></span>
+      <span style="flex:3;background:#F3C845"></span>
+    </div>
+    <p class="caption" style="margin-top:8px">Proporção: muito Inox, verde como cor da marca, páprica e manteiga em pequenas doses.</p>
+
+    <h3 style="margin:40px 0 6px">Semáforo do CMV</h3>
+    <p class="muted">As cores de estado do app seguem a faixa de CMV do prato, comparada ao CMV alvo da ficha. As faixas abaixo são o padrão de referência para food service.</p>
+    <div class="semaforo">
+      <div class="sem s-ok"><span class="faixa">até 30%</span><b>Saudável</b><p>Prato dentro da meta. Verde Salsa.</p></div>
+      <div class="sem s-warn"><span class="faixa">30 a 35%</span><b>Atenção</b><p>Margem apertando. Revise porção ou preço. Manteiga.</p></div>
+      <div class="sem s-bad"><span class="faixa">acima de 35%</span><b>Alto</b><p>Prato come a margem. Ajuste já. Páprica.</p></div>
+    </div>
+  </section>
+
+  <!-- TIPOGRAFIA -->
+  <section id="tipografia">
+    <div class="sec-head">
+      <span class="tag"><b>04</b> Tipografia</span>
+      <h2>Letra de comanda</h2>
+      <p class="muted">Três famílias gratuitas do Google Fonts. Títulos largos e firmes, texto amigável e números em fonte de comanda, sempre alinhados.</p>
+    </div>
+    <div class="card" style="padding-block:4px">
+      <div class="type-row"><div class="meta"><b>Archivo</b>Títulos e logo<br>800 a 850, largura 112 a 115</div><div class="sample s-display">Margem no prato</div></div>
+      <div class="type-row"><div class="meta"><b>Figtree</b>Texto e interface<br>400, 500, 600</div><div class="sample s-body">Cadastre o insumo uma vez. Quando o fornecedor mudar o preço, todas as fichas que usam esse insumo são recalculadas na hora.</div></div>
+      <div class="type-row"><div class="meta"><b>IBM Plex Mono</b>Valores, gramas, %<br>500, números tabulares</div><div class="sample s-mono">150 g · R$ 4,35 · 29,2%</div></div>
+    </div>
+    <div class="scale card" style="margin-top:16px">
+      <div><span class="mono">Display 64/1.0</span><span style="font:850 40px/1 var(--f-display);font-variation-settings:'wdth' 115">CMV de 29%</span></div>
+      <div><span class="mono">Título 32/1.1</span><span style="font:800 28px/1.1 var(--f-display);font-variation-settings:'wdth' 112">Fichas técnicas</span></div>
+      <div><span class="mono">Subtítulo 20/1.3</span><span style="font:600 20px/1.3 var(--f-body)">Custo por porção</span></div>
+      <div><span class="mono">Texto 16/1.6</span><span style="font:400 16px/1.6 var(--f-body)">O custo do X-Burguer subiu R$ 0,42.</span></div>
+      <div><span class="mono">Dado 14/1.4</span><span class="mono" style="font-size:14px;color:var(--ink);width:auto">R$ 8,74 / porção</span></div>
+      <div><span class="mono">Rótulo 12 caixa-alta</span><span class="tag">Fator de correção</span></div>
+    </div>
+  </section>
+
+  <!-- VOZ -->
+  <section id="voz">
+    <div class="sec-head">
+      <span class="tag"><b>05</b> Voz</span>
+      <h2>Fala como quem já fechou caixa</h2>
+      <p class="muted">A marca é o colega que entende de cozinha e de conta. Fala direto, usa os termos do dia a dia e mostra o número antes da explicação.</p>
+    </div>
+    <div class="grid g3">
+      <div class="card trait"><h3>Preciso</h3><p>Número exato, com unidade. "R$ 0,42 a mais por porção", nunca "o custo subiu um pouco".</p></div>
+      <div class="card trait"><h3>Prático</h3><p>Frase curta, verbo no imperativo, um passo por vez. Quem lê está com a mão suja de farinha.</p></div>
+      <div class="card trait"><h3>Parceiro</h3><p>Trata por "você". Avisa do problema sem dar bronca e já mostra o caminho para resolver.</p></div>
+    </div>
+    <div class="tbl" style="margin-top:16px">
+      <table class="voice-table">
+        <thead><tr><th>Diz</th><th>Não diz</th></tr></thead>
+        <tbody>
+          <tr><td>O queijo subiu 8%. 6 fichas foram recalculadas.</td><td>Detectamos uma alteração nos parâmetros de custo.</td></tr>
+          <tr><td>Esse prato está com CMV de 38%. Cobre R$ 32,90 para voltar a 30%.</td><td>Atenção! Seu prato está dando prejuízo!!!</td></tr>
+          <tr><td>Quanto custa fazer seu prato mais vendido?</td><td>Revolucione a gestão do seu negócio com inteligência.</td></tr>
+          <tr><td>Fale com a gente no WhatsApp.</td><td>Entre em contato com nossa central de atendimento.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="card" style="margin-top:16px">
+      <span class="tag">Vocabulário da casa</span>
+      <div class="glossary"><span>insumo</span><span>ficha técnica</span><span>porção</span><span>rendimento</span><span>fator de correção</span><span>custo por porção</span><span>CMV alvo</span><span>preço sugerido</span><span>margem</span></div>
+      <p class="caption">Evite: "solução", "plataforma", "otimizar", "gestão inteligente", travessões e excesso de exclamação.</p>
+    </div>
+  </section>
+
+  <!-- APLICAÇÕES -->
+  <section id="aplicacoes">
+    <div class="sec-head">
+      <span class="tag"><b>06</b> Aplicações</span>
+      <h2>A marca no dia a dia</h2>
+    </div>
+    <div class="apps">
+      <figure style="margin:0">
+        <div class="phone"><div class="screen">
+          <div class="scr-top"><span class="s mono" style="font-size:10px">FICHA TÉCNICA</span><span class="t">X-Burguer da casa</span><span class="s">Rende 1 porção</span></div>
+          <div class="scr-body">
+            <div class="ln"><span>Pão brioche</span><span>1 un · 1,20</span></div>
+            <div class="ln"><span>Blend bovino</span><span>150 g · 4,35</span></div>
+            <div class="ln"><span>Queijo prato</span><span>30 g · 1,26</span></div>
+            <div class="ln"><span>Alface e tomate</span><span>45 g · 0,63</span></div>
+            <div class="ln"><span>Molho da casa</span><span>20 g · 0,40</span></div>
+            <div class="ln"><span>Embalagem</span><span>1 un · 0,90</span></div>
+            <div class="tot">
+              <div class="row"><span>Custo da porção</span><b class="mono">R$ 8,74</b></div>
+              <div class="row"><span>Preço de venda</span><b class="mono">R$ 29,90</b></div>
+              <div class="row"><span>CMV</span><span class="pill">29,2% ✓</span></div>
+            </div>
+          </div>
+          <div class="scr-tab"><span>Início</span><span>Insumos</span><span class="on">Fichas</span><span>Mais</span></div>
+        </div></div>
+        <figcaption class="caption app-label" style="text-align:center"><b>App.</b> Verde no topo, números em mono, CMV com a cor do semáforo.</figcaption>
+      </figure>
+
+      <figure style="margin:0">
+        <div class="post">
+          <span class="kicker">Ficha na mão</span>
+          <p class="q">Seu X-Burguer custa <em>R$ 8,74</em> pra fazer. Você vende por quanto?</p>
+          <div class="foot"><span class="mini"><svg viewBox="0 0 512 512"><use href="#simbolo"/></svg>CMV certo</span><span>@cmvcerto</span></div>
+        </div>
+        <figcaption class="caption app-label"><b>Post 4:5.</b> Uma pergunta com um número real. Número em manteiga.</figcaption>
+      </figure>
+
+      <figure style="margin:0">
+        <div class="wa">
+          <div class="bubble me">Oi! Quero assinar o Pro do CMV Certo com a oferta do primeiro mês. Meu e-mail: joana@exemplo.com<small>14:02</small></div>
+          <div class="bubble">Oi, Joana! O primeiro mês sai por R$ 10, depois R$ 25/mês. Assim que o Pix cair eu libero sua conta. 🙂<small>14:03</small></div>
+          <div class="bubble">Pronto, Pro liberado até 27/11. Insumos e fichas sem limite. Bom serviço!<small>14:09</small></div>
+        </div>
+        <figcaption class="caption app-label"><b>WhatsApp do suporte.</b> Mesmo tom do app: valor, prazo e próximo passo.</figcaption>
+      </figure>
+
+      <figure style="margin:0;display:grid;gap:12px">
+        <div class="bizcard"><div class="lockup"><svg viewBox="0 0 512 512"><use href="#simbolo"/></svg><span class="wm"><span class="a">CMV</span> <span class="b">certo</span></span></div><div class="who"><b>Joana Martins</b><span>Atendimento</span><span class="mono">cmvcerto.com</span></div></div>
+        <div class="bizcard bizcard-back"><svg viewBox="0 0 512 512"><use href="#simbolo"/></svg></div>
+        <figcaption class="caption"><b>Cartão de visita.</b> Frente clara, verso em Salsa só com o símbolo.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <!-- MENSAGENS -->
+  <section id="mensagens">
+    <div class="sec-head">
+      <span class="tag"><b>07</b> Mensagens</span>
+      <h2>O que a marca diz</h2>
+    </div>
+    <div class="grid g2">
+      <div class="card"><span class="tag">Assinatura</span><p class="msg">Cada prato no preço certo.</p></div>
+      <div class="card"><span class="tag">Alternativas</span><p class="msg">Custo na ponta do lápis.</p><p class="msg">Mudou o preço, a ficha acompanha.</p><p class="msg">Saiba quanto sobra em cada prato.</p></div>
+      <div class="card"><span class="tag">Em uma frase</span><p>O CMV Certo é o app de ficha técnica que recalcula o custo das suas receitas sempre que um insumo muda de preço.</p></div>
+      <div class="card"><span class="tag">Chamada para ação</span><p class="msg">Monte sua primeira ficha grátis</p><p class="caption">No plano Free: até 10 insumos e 2 fichas, sem cartão.</p></div>
+    </div>
+    <h3 style="margin:32px 0 12px">Bio do Instagram</h3>
+    <div class="bio">CMV Certo · ficha técnica no celular
+Saiba quanto custa cada prato e quanto cobrar
+Mudou o preço do insumo, a ficha recalcula
+👇 Monte sua primeira ficha grátis</div>
+  </section>
+
+  <!-- ARQUIVOS -->
+  <section id="arquivos">
+    <div class="sec-head">
+      <span class="tag"><b>08</b> Arquivos</span>
+      <h2>Pasta da marca</h2>
+      <p class="muted">Tudo está no projeto, em <span class="mono">ficha-certa/brand/</span>.</p>
+    </div>
+    <div class="files">logo/simbolo.svg              símbolo principal (verde + páprica)
+logo/simbolo-negativo.svg     para fundo escuro (branco + manteiga)
+logo/simbolo-mono.svg         uma cor
+logo/icone-app.svg            ícone com fundo verde e cantos arredondados
+logo/icone-maskable.svg       ícone para Android (área segura)
+icons/icon-512.png · icon-192.png · maskable-512.png
+icons/apple-touch-icon.png · favicon-32.png · simbolo-1024.png</div>
+  </section>
+
+  <footer>CMV Certo · Manual de marca v1 · outubro de 2026</footer>
+</div>
+
+<script>
+const cores = [
+  { nome: "Salsa", hex: "#17694A", uso: "Cor da marca, topo do app, botões", txt: "#fff" },
+  { nome: "Salsa escuro", hex: "#0F4A33", uso: "Fundos escuros, hover, rodapé", txt: "#fff" },
+  { nome: "Páprica", hex: "#E0582A", uso: "Alertas, CMV alto, destaque de campanha", txt: "#fff" },
+  { nome: "Manteiga", hex: "#F3C845", uso: "Check do logo, número em destaque", txt: "#18211C" },
+  { nome: "Inox", hex: "#F3F5F1", uso: "Fundo do app e das peças", txt: "#18211C" },
+  { nome: "Carvão", hex: "#18211C", uso: "Texto e títulos", txt: "#fff" },
+];
+function rgb(h){ const n=parseInt(h.slice(1),16); return [(n>>16)&255,(n>>8)&255,n&255].join(", "); }
+const box = document.getElementById("swatches");
+cores.forEach(c => {
+  const el = document.createElement("div");
+  el.className = "sw";
+  el.innerHTML = `<div class="chip" style="background:${c.hex};color:${c.txt}">${c.nome}</div>
+    <div class="info"><span class="mono">${c.hex}</span><span class="mono muted">RGB ${rgb(c.hex)}</span><span class="muted">${c.uso}</span><button type="button" id="cp-${c.hex.slice(1)}">Copiar hex</button></div>`;
+  const btn = el.querySelector("button");
+  btn.addEventListener("click", () => {
+    navigator.clipboard.writeText(c.hex).then(() => { btn.textContent = "Copiado"; setTimeout(() => btn.textContent = "Copiar hex", 1400); })
+      .catch(() => { const s = window.getSelection(), r = document.createRange(); r.selectNodeContents(el.querySelector(".mono")); s.removeAllRanges(); s.addRange(r); });
+  });
+  box.appendChild(el);
+});
+</script>

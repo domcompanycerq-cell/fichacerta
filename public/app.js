@@ -17,7 +17,7 @@
   // Link do WhatsApp do suporte com a mensagem pronta. É por ele que o usuário assina e renova o Pro.
   function linkSuporte(motivo) {
     const num = S.cfg.suporteWhatsApp || "5515988305442";
-    const nome = S.cfg.appName || "Ficha Certa";
+    const nome = S.cfg.appName || "CMV Certo";
     const textos = {
       assinar: ofertaAtiva()
         ? `Olá! Quero assinar o plano Pro do ${nome} com a oferta de R$ ${fmt(precoOferta(), 2)} nos primeiros ${S.cfg.diasOferta || 30} dias.`
@@ -48,7 +48,7 @@
     try {
       const r = await api("GET", "/api/me");
       S.me = r.user; Object.assign(S.cfg, r);
-      document.title = r.appName || "Ficha Certa";
+      document.title = r.appName || "CMV Certo";
       await carregarDados();
       renderShell();
     } catch (e) {
@@ -73,10 +73,47 @@
     if (alvoErro) alvoErro.textContent = e.message; else toast(esc(e.message));
   }
 
+  /* ================= marca ================= */
+  // Símbolo do CMV Certo: borda de prato aberta (o C de custo) com o check saindo dela.
+  const logo = () => `<svg class="logo-svg" viewBox="0 0 512 512" aria-hidden="true"><path class="lc" d="M331 126.1A150 150 0 1 0 397 307.3"/><path class="lk" d="M180 250 240 308 420 128"/></svg>`;
+  // Nome no formato da marca: primeira palavra forte, o resto leve e em minúsculas ("CMV certo").
+  const wordmark = (nome) => { const [a, ...b] = String(nome).split(" "); return `<span class="wordmark"><b>${esc(a)}</b>${b.length ? " " + esc(b.join(" ").toLowerCase()) : ""}</span>`; };
+
+  // Fotos das fichas: escolhidas pela categoria ou pelo nome da receita.
+  const FOTOS = [
+    [/burg|lanche|sanduich|x-|hot ?dog|beirute|wrap/, "lanche"],
+    [/pizza|esfirra|calzone/, "pizza"],
+    [/bolo|doce|torta|brigadeiro|pudim|sobremesa|mousse|brownie|cookie|confeit|cupcake|sorvete|acai|pave/, "doce"],
+    [/salada|folhas/, "salada"],
+    [/massa|macarr|lasanha|espaguete|nhoque|penne|talharim|ravio|parafuso/, "massa"],
+    [/carne|bife|picanha|frango|churrasc|file|costela|steak|grelhad|porco|peixe|parmegian|bisteca|alcatra/, "carne"],
+    [/bebida|suco|cafe|drink|caipir|refri|cerveja|vitamina|cha |capuccino|cappuccino|latte|milk/, "bebida"],
+    [/bowl|poke|marmita|prato feito|executivo|vegan|fit|tapioca|acaraje|feijoada|baiao/, "bowl"],
+  ];
+  const fotoFicha = (r) => { const t = norm(`${r.categoria || ""} ${r.nome || ""} `); const f = FOTOS.find(([re]) => re.test(t)); return `/img/cat-${f ? f[1] : "prato"}.webp`; };
+
   /* ================= autenticação ================= */
+  // Fichas de exemplo que se revezam na página de acesso (não são dados do usuário).
+  const EXEMPLOS = [
+    { nome: "X-Burguer da casa", foto: "lanche", custo: 8.74, venda: 29.9 },
+    { nome: "Penne ao sugo", foto: "massa", custo: 7.15, venda: 21.9 },
+    { nome: "Bolo de chocolate (fatia)", foto: "doce", custo: 4.62, venda: 12.5 },
+    { nome: "Pizza margherita", foto: "pizza", custo: 19.8, venda: 54.9 },
+  ];
+  let timerExemplo = null;
+  function ticketExemplo(i) {
+    const e = EXEMPLOS[i % EXEMPLOS.length], cmv = e.custo / e.venda;
+    const cls = cmv <= 0.3 ? "ok" : cmv <= 0.35 ? "warn" : "bad";
+    return `<img src="/img/cat-${e.foto}.webp" alt="" width="96" height="96" loading="lazy">
+      <div class="tk-body"><span class="tk-k">Exemplo de ficha</span><b class="tk-nome">${esc(e.nome)}</b>
+        <div class="tk-row"><span>Custo da porção</span><span class="tk-v">${brl(e.custo)}</span></div>
+        <div class="tk-row"><span>Preço de venda</span><span class="tk-v">${brl(e.venda)}</span></div>
+        <div class="tk-row"><span>CMV</span><span class="tk-pill ${cls}">${pct(cmv)}</span></div></div>`;
+  }
+
   function renderAuth(modo, token, aviso) {
-    const nome = S.cfg.appName || "Ficha Certa";
-    const marca = `<div class="brand"><span class="logo">${icon("chef")}</span>${esc(nome)}</div>`;
+    const nome = S.cfg.appName || "CMV Certo";
+    const marca = `<div class="brand">${logo()}${wordmark(nome)}</div>`;
     const forms = {
       login: `
         <h1>Entrar</h1><p class="sub">Acesse seus insumos e fichas técnicas.</p>
@@ -125,7 +162,29 @@
           <li>${icon("check")}Insumos ilimitados</li><li>${icon("check")}Fichas técnicas ilimitadas</li><li>${icon("check")}Recálculo automático</li>
           <li>${icon("check")}Histórico de preços</li></ul></div>
       </div>` : "";
-    app.innerHTML = `<div class="auth">${marca}<div class="auth-box">${forms[modo]}</div>${planos}</div>`;
+    app.innerHTML = `<div class="auth">
+      <aside class="auth-hero">
+        <img class="auth-photo" src="/img/acesso.webp" alt="Chef finalizando pratos na cozinha" fetchpriority="high">
+        <div class="auth-hero-in">${marca}
+          <div class="auth-pitch"><h2>Cada prato no preço certo.</h2>
+            <p>Cadastre seus insumos, monte a ficha técnica e veja o custo e o CMV de cada prato. Mudou o preço no fornecedor, a ficha recalcula sozinha.</p>
+            <div class="auth-ticket" id="ticket" aria-live="off">${ticketExemplo(0)}</div>
+          </div>
+        </div>
+      </aside>
+      <main class="auth-side"><div class="auth-box">${forms[modo]}</div>${planos}
+        <p class="auth-foot">Funciona no celular e no computador · Instale como app</p></main>
+    </div>`;
+    // Revezamento das fichas de exemplo. Para sozinho ao sair da tela de acesso e não roda para quem prefere menos movimento.
+    clearInterval(timerExemplo);
+    if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      let n = 0;
+      timerExemplo = setInterval(() => {
+        const t = $("#ticket"); if (!t) { clearInterval(timerExemplo); return; }
+        t.classList.add("troca");
+        setTimeout(() => { t.innerHTML = ticketExemplo(++n); t.classList.remove("troca"); }, 280);
+      }, 4200);
+    }
     $$("[data-go]").forEach((b) => b.addEventListener("click", () => renderAuth(b.dataset.go)));
     const tel = $("#tel");
     if (tel) tel.addEventListener("input", () => { tel.value = mascaraTel(tel.value); });
@@ -210,7 +269,7 @@
       return `<div class="meter"><span>${rot}: ${usado} de ${max}</span><div class="bar"><i class="${usado >= max ? "full" : ""}" style="width:${p}%"></i></div></div>`;
     };
     side.innerHTML = `
-      <div class="ws"><span class="brand-mark">${icon("chef")}</span><span class="who">${esc(S.cfg.appName || "Ficha Certa")}<small>${esc(me.nome)}</small></span>
+      <div class="ws"><span class="brand-mark">${logo()}</span><span class="who">${wordmark(S.cfg.appName || "CMV Certo")}<small>${esc(me.nome)}</small></span>
         <span class="tag ${isPro() ? "green" : ""}" style="margin-left:auto">${isPro() ? "Pro" : "Free"}</span></div>
       ${navItem(NAV[0])}
       <div class="nav-label">Cozinha</div>
@@ -282,6 +341,8 @@
   }
   const crumb = (t) => { $("#crumb").textContent = t; };
   const COR = { box: "c-ins", book: "c-fic", history: "c-his", bell: "c-not", card: "c-pla", user: "c-usr", home: "c-home" };
+  // Cabeçalho com foto (Insumos e Fichas): título e descrição sobre a imagem.
+  const pageBanner = (foto, ic, titulo, desc) => `<div class="page-banner"><img src="/img/${foto}.webp" alt="" decoding="async"><div class="pb-in"><div class="page-icon">${icon(ic)}</div><div class="pb-txt"><h1 class="page-title">${esc(titulo)}</h1><p>${desc}</p></div></div></div>`;
   const pageHead = (ic, titulo, desc) => `<div class="page-head"><div class="page-icon ${COR[ic] || ""}">${icon(ic)}</div><h1 class="page-title">${esc(titulo)}</h1></div>${desc ? `<p class="page-desc">${desc}</p>` : '<div style="height:14px"></div>'}`;
 
   function upsell(msg) {
@@ -339,8 +400,10 @@
     const vazio = !S.insumos.length;
 
     $("#view").innerHTML = `<div class="page wide">
-      <div class="hello"><div><h1>${saud}, ${esc((me.nome || "").split(" ")[0])}!</h1><p>${new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" })}</p></div>
-        <span class="tag ${isPro() ? "green" : ""}">${isPro() ? `Pro até ${dataBR(me.proAte)}` : "Plano Free"}</span></div>
+      <div class="hello"><img class="hello-photo" src="/img/bancada.webp" alt="" decoding="async">
+        <div class="hello-in"><div><p class="hello-date">${new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" })}</p><h1>${saud}, ${esc((me.nome || "").split(" ")[0])}!</h1>
+          <p class="hello-sum">${vazio ? "Vamos montar sua primeira ficha técnica?" : comVenda.length ? `CMV médio de <b>${pct(cmvMedio)}</b> em ${comVenda.length} ficha${comVenda.length > 1 ? "s" : ""} com preço de venda.` : `${me.uso.insumos} insumo${me.uso.insumos === 1 ? "" : "s"} e ${me.uso.receitas} ficha${me.uso.receitas === 1 ? "" : "s"} cadastrados.`}</p></div>
+        <span class="tag ${isPro() ? "green" : ""}">${isPro() ? `Pro até ${dataBR(me.proAte)}` : "Plano Free"}</span></div></div>
       ${avisoBloqueio()}
       ${ofertaBanner()}
       <div class="quick">
@@ -348,7 +411,7 @@
         <button data-act="ficha">${'<span class="q-ico c-fic">'}${icon("book")}</span>Nova ficha</button>
         <button data-act="imp">${'<span class="q-ico c-his">'}${icon("upload")}</span>Importar lista</button>
       </div>
-      ${vazio ? `<div class="panel empty-state"><div class="ill c-ins">${icon("box")}</div><h3>Comece pelos seus insumos</h3><p>Cadastre o que você compra, com a embalagem e o preço. Depois monte as fichas técnicas: o custo é calculado sozinho.</p><button class="btn primary" data-act="ins">${icon("plus")}Cadastrar primeiro insumo</button></div>` : `
+      ${vazio ? `<div class="panel empty-state"><img class="ill-photo" src="/img/insumos.webp" alt=""><h3>Comece pelos seus insumos</h3><p>Cadastre o que você compra, com a embalagem e o preço. Depois monte as fichas técnicas: o custo é calculado sozinho.</p><button class="btn primary" data-act="ins">${icon("plus")}Cadastrar primeiro insumo</button></div>` : `
       <div class="kpis">
         ${kpi("#insumos", "box", "c-ins", "Insumos", me.uso.insumos, me.limites.insumos != null ? `de ${me.limites.insumos} no Free` : "cadastrados")}
         ${kpi("#fichas", "book", "c-fic", "Fichas técnicas", me.uso.receitas, me.limites.receitas != null ? `de ${me.limites.receitas} no Free` : "cadastradas")}
@@ -404,7 +467,7 @@
     crumb("Insumos");
     const lim = S.me.limites.insumos, cheio = lim != null && S.insumos.length >= lim;
     $("#view").innerHTML = `<div class="page wide">
-      ${pageHead("box", "Insumos", "Tudo o que você compra, com a embalagem e o preço pago. Mude o preço direto na lista: as fichas técnicas que usam o item são recalculadas na hora.")}
+      ${pageBanner("insumos", "box", "Insumos", "Tudo o que você compra, com a embalagem e o preço pago. Mude o preço direto na lista: as fichas técnicas que usam o item são recalculadas na hora.")}
       ${avisoBloqueio() || (cheio ? `<div class="callout yellow">${icon("info")}<div class="ct">Você chegou ao limite de ${lim} insumos do plano Free. <a href="#plano">Assine o Pro</a> para cadastrar sem limite.</div></div>` : "")}
       <div class="db-toolbar">
         <span class="view">${icon("table")}${S.insumos.length} insumo${S.insumos.length === 1 ? "" : "s"}</span><span class="spacer"></span>
@@ -431,7 +494,7 @@
     const q = norm(S.q);
     const list = S.insumos.filter((i) => !q || norm(i.nome).includes(q));
     if (!S.insumos.length) {
-      const vazio = `<div class="empty-state"><div class="ill c-ins">${icon("box")}</div><h3>Nenhum insumo ainda</h3><p>Cadastre o que você compra, com a embalagem e o preço. Ou importe uma lista como “Arroz, 1kg, 3,60”.</p></div>`;
+      const vazio = `<div class="empty-state"><img class="ill-photo" src="/img/insumos.webp" alt=""><h3>Nenhum insumo ainda</h3><p>Cadastre o que você compra, com a embalagem e o preço. Ou importe uma lista como “Arroz, 1kg, 3,60”.</p></div>`;
       tb.innerHTML = `<tr><td colspan="6">${vazio}</td></tr>`; lista.innerHTML = vazio; return;
     }
     if (!list.length) { const n = `<div class="empty">Nada encontrado para “${esc(S.q)}”.</div>`; tb.innerHTML = `<tr><td colspan="6">${n}</td></tr>`; lista.innerHTML = n; return; }
@@ -591,13 +654,13 @@
     const q = norm(S.qRec);
     const list = S.receitas.filter((r) => !q || norm(r.nome).includes(q) || norm(r.categoria).includes(q));
     $("#view").innerHTML = `<div class="page wide">
-      ${pageHead("book", "Fichas técnicas", "Cada ficha usa os preços atuais dos seus insumos. Quando um preço muda, o custo e o preço sugerido se atualizam sozinhos.")}
+      ${pageBanner("fichas", "book", "Fichas técnicas", "Cada ficha usa os preços atuais dos seus insumos. Quando um preço muda, o custo e o preço sugerido se atualizam sozinhos.")}
       ${avisoBloqueio()}${!avisoBloqueio() && cheio ? `<div class="callout yellow">${icon("info")}<div class="ct">Você está usando ${S.receitas.length} de ${lim} fichas do plano Free. <a href="#plano">Assine o Pro</a> para criar sem limite.</div></div>` : ""}
       <div class="db-toolbar"><span class="view">${icon("grid")}${S.receitas.length} ficha${S.receitas.length === 1 ? "" : "s"}</span><span class="spacer"></span>
         <div class="search-wrap">${icon("search")}<input class="search" id="q" type="search" placeholder="Buscar…" value="${esc(S.qRec)}" aria-label="Buscar ficha"></div>
         <button class="btn primary desktop-only" id="nova">${icon("plus")}Nova</button></div>
       <div class="gallery">
-        ${!S.receitas.length ? `<div class="empty-state mobile-only" style="grid-column:1/-1"><div class="ill c-fic">${icon("book")}</div><h3>Nenhuma ficha ainda</h3><p>Toque no + para montar a primeira ficha técnica com os seus insumos.</p></div>` : ""}
+        ${!S.receitas.length ? `<div class="empty-state mobile-only" style="grid-column:1/-1"><img class="ill-photo" src="/img/fichas.webp" alt=""><h3>Nenhuma ficha ainda</h3><p>Toque no + para montar a primeira ficha técnica com os seus insumos.</p></div>` : ""}
         ${list.map((r) => {
           if (r.bloqueado) return `<button class="gcard locked" data-bloq="1" data-id="${r.id}">
             <div class="cover"><span>${icon("lock").replace("<svg", '<svg style="width:26px;height:26px"')}</span></div>
@@ -608,7 +671,7 @@
           const c = C.calcRecipe(r, S.insMap);
           const over = c.venda > 0 && c.cmvReal > r.cmvAlvo / 100;
           return `<button class="gcard" data-id="${r.id}">
-            <div class="cover ${over || c.errs ? "warn" : ""}"><span>${brl(c.porcao)}</span><small>por ${esc(singular(r.unidadeRend))}</small></div>
+            <div class="cover photo ${over || c.errs ? "warn" : ""}"><img src="${fotoFicha(r)}" alt="" loading="lazy" decoding="async"><span>${brl(c.porcao)}</span><small>por ${esc(singular(r.unidadeRend))}</small></div>
             <div class="body"><div class="t">${esc(r.nome)}</div>
               <div class="row" style="gap:4px">${r.categoria ? `<span class="tag orange">${esc(r.categoria)}</span>` : ""}${c.errs ? `<span class="tag red">${c.errs} pendência</span>` : ""}${c.venda > 0 ? `<span class="tag ${over ? "red" : "green"}">CMV ${pct(c.cmvReal)}</span>` : ""}</div>
               <div class="prop"><span>Custo total</span><b>${brl(c.total)}</b></div>
@@ -643,7 +706,7 @@
     const unitOpts = (fam, sel) => C.FAM_UNITS[fam].map((u) => `<option ${u === sel ? "selected" : ""}>${u}</option>`).join("");
     $("#topActions").innerHTML = `<span class="small faint desktop-only" id="saveState"></span>${id ? `<button class="btn ghost danger" id="del">Excluir</button>` : ""}<button class="btn primary desktop-only" id="save">Salvar</button>`;
     $("#view").innerHTML = `<div class="page">
-      <div class="page-icon">${icon("book")}</div>
+      <div class="ficha-photo"><img id="fphoto" src="${fotoFicha(r)}" alt="" decoding="async"></div>
       <input class="title-input" id="fn" placeholder="Nome da receita" value="${esc(r.nome)}" aria-label="Nome da receita">
       <div class="props">
         <div class="k">${icon("tag")}Categoria</div><div class="v"><input class="input" id="fcat" placeholder="Vazio" value="${esc(r.categoria)}"></div>
@@ -711,6 +774,9 @@
     $("#addLine").onclick = () => { addLine(); const s2 = $(".sel", lines.lastElementChild); s2.scrollIntoView({ block: "center", behavior: "smooth" }); s2.focus(); };
     const page = $("#view .page");
     page.addEventListener("input", () => { sujo(); recompute(); });
+    // A foto do topo acompanha o nome e a categoria (ex.: "Pizza" mostra pizza).
+    const trocaFoto = () => { const src = fotoFicha({ nome: $("#fn").value, categoria: $("#fcat").value }); if (!$("#fphoto").src.endsWith(src)) $("#fphoto").src = src; };
+    $("#fn").addEventListener("input", trocaFoto); $("#fcat").addEventListener("input", trocaFoto);
     page.addEventListener("change", () => { sujo(); recompute(); });
     recompute();
     if (!id && window.innerWidth > 860) $("#fn").focus();

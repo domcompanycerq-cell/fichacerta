@@ -86,7 +86,7 @@
       ]
     },
     {
-      "source": "/icons/(.*)",
+      "source": "/(icons|img|fonts)/(.*)",
       "headers": [
         {
           "key": "Cache-Control",

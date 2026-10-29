@@ -1,8 +1,8 @@
-// Service worker do Ficha Certa: permite instalar o app e abrir a tela mesmo sem internet.
+// Service worker do CMV Certo: permite instalar o app e abrir a tela mesmo sem internet.
 // Arquivos do app: rede primeiro (para sempre pegar a versão nova), cache como reserva.
 // A API (/api/...) nunca é guardada em cache: os dados vêm sempre do servidor.
-const CACHE = "ficha-certa-v3"; // troque o número quando mudar a lista de arquivos
-const ARQUIVOS = ["/", "/index.html", "/style.css", "/calc.js", "/ui.js", "/app.js", "/manifest.webmanifest", "/icons/icon-192.png"];
+const CACHE = "cmv-certo-v4"; // troque o número quando mudar a lista de arquivos
+const ARQUIVOS = ["/", "/index.html", "/style.css", "/calc.js", "/ui.js", "/app.js", "/manifest.webmanifest", "/icons/icon-192.png", "/fonts/archivo.woff2", "/fonts/figtree.woff2", "/fonts/plexmono-500.woff2", "/fonts/plexmono-600.woff2", "/img/acesso.webp"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ARQUIVOS)).then(() => self.skipWaiting()));
