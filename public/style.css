@@ -425,25 +425,29 @@ table.db .title-cell svg { width: 16px; height: 16px; color: var(--text-3); flex
 @media (max-width: 520px) { .auth-plans { grid-template-columns: 1fr; } }
 
 /* ---------- fotos dentro do app ---------- */
-.hello { position: relative; overflow: hidden; border-radius: 18px; min-height: 168px; padding: 22px; color: #fff; display: flex; align-items: flex-end; background: var(--brand-deep); margin-bottom: 16px; box-shadow: var(--shadow); }
-.hello-photo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-.hello::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(10, 34, 24, .92) 0%, rgba(10, 34, 24, .7) 45%, rgba(10, 34, 24, .15) 100%); }
-.hello-in { position: relative; z-index: 1; width: 100%; display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-.hello h1 { font-size: 32px; color: #fff; }
+/* Banners com foto: no computador o texto fica à esquerda sobre uma sombra e a foto aparece limpa à direita;
+   no celular a foto ocupa o alto do banner e o texto fica embaixo (recortes próprios em /img/*-m-*.webp). */
+.hello, .page-banner { position: relative; overflow: hidden; border-radius: 18px; color: #fff; display: flex; align-items: flex-end; background: var(--brand-deep); box-shadow: var(--shadow); isolation: isolate; }
+.hello { min-height: 200px; padding: 24px 26px; margin-bottom: 16px; }
+.page-banner { min-height: 190px; padding: 22px 24px; margin-bottom: 18px; }
+.hello-photo, .pb-photo { position: absolute; inset: 0; z-index: -2; width: 100%; height: 100%; object-fit: cover; animation: banner-in .7s ease-out both; }
+@keyframes banner-in { from { transform: scale(1.04); opacity: .4; } }
+.hello::after, .page-banner::after { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background: linear-gradient(90deg, rgba(10, 34, 24, .9) 0%, rgba(10, 34, 24, .72) 30%, rgba(10, 34, 24, .18) 60%, rgba(10, 34, 24, 0) 75%),
+              linear-gradient(0deg, rgba(10, 34, 24, .35) 0%, rgba(10, 34, 24, 0) 45%); }
+.hello-in { width: 100%; display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.hello h1 { font-size: 34px; color: #fff; text-shadow: 0 1px 12px rgba(0, 0, 0, .25); }
 .hello .hello-date { margin: 0 0 2px; font: 500 12px var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--manteiga); }
-.hello .hello-sum { margin: 6px 0 0; color: rgba(255, 255, 255, .88); font-size: 15px; }
+.hello .hello-sum { margin: 6px 0 0; color: rgba(255, 255, 255, .9); font-size: 15px; max-width: 46ch; }
 .hello .hello-sum b { font-family: var(--font-mono); color: var(--manteiga); }
-.hello .tag { background: rgba(255, 255, 255, .16); color: #fff; backdrop-filter: blur(6px); }
+.hello .tag { background: rgba(10, 34, 24, .55); color: #fff; backdrop-filter: blur(6px); }
 .hello .tag.green { background: var(--manteiga); color: #18211c; }
 
-.page-banner { position: relative; overflow: hidden; border-radius: 18px; min-height: 150px; display: flex; align-items: flex-end; padding: 20px; margin-bottom: 18px; color: #fff; background: var(--brand-deep); box-shadow: var(--shadow); }
-.page-banner > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-.page-banner::after { content: ""; position: absolute; inset: 0; background: linear-gradient(0deg, rgba(10, 34, 24, .9) 0%, rgba(10, 34, 24, .55) 55%, rgba(10, 34, 24, .2) 100%); }
-.pb-in { position: relative; z-index: 1; display: flex; align-items: flex-end; gap: 14px; }
+.pb-in { display: flex; align-items: flex-end; gap: 14px; max-width: 600px; }
 .pb-in .page-icon { background: rgba(255, 255, 255, .16); color: #fff; backdrop-filter: blur(6px); }
 .pb-txt { min-width: 0; }
-.pb-txt .page-title { color: #fff; }
-.pb-txt p { margin: 4px 0 0; color: rgba(255, 255, 255, .86); font-size: 14px; max-width: 70ch; }
+.pb-txt .page-title { color: #fff; text-shadow: 0 1px 12px rgba(0, 0, 0, .25); }
+.pb-txt p { margin: 4px 0 0; color: rgba(255, 255, 255, .9); font-size: 14px; }
 
 .ill-photo { width: 120px; height: 120px; border-radius: 50%; object-fit: cover; display: block; margin: 0 auto 14px; box-shadow: 0 0 0 6px var(--brand-soft); }
 
@@ -460,8 +464,13 @@ table.db .title-cell svg { width: 16px; height: 16px; color: var(--text-3); flex
 .ficha-photo img { width: 100%; height: 100%; object-fit: cover; display: block; animation: fade .3s ease-out; }
 
 @media (max-width: 860px) {
-  .hello { min-height: 150px; padding: 18px; border-radius: 16px; }
-  .page-banner { min-height: 128px; padding: 16px; border-radius: 16px; }
+  .hello { min-height: 236px; padding: 18px; border-radius: 16px; }
+  .page-banner { min-height: 216px; padding: 16px; border-radius: 16px; }
+  .hello::after, .page-banner::after { background: linear-gradient(0deg, rgba(10, 34, 24, .94) 0%, rgba(10, 34, 24, .7) 34%, rgba(10, 34, 24, .12) 68%, rgba(10, 34, 24, 0) 100%); }
+  .hello .tag { position: absolute; top: 14px; right: 14px; }
+  .pb-in { gap: 12px; }
+  .pb-in .page-icon { display: none; }
+  .pb-txt p { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 13px; }
   .ficha-photo { height: 130px; border-radius: 16px; }
 }
 

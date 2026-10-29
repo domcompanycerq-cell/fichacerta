@@ -341,8 +341,12 @@
   }
   const crumb = (t) => { $("#crumb").textContent = t; };
   const COR = { box: "c-ins", book: "c-fic", history: "c-his", bell: "c-not", card: "c-pla", user: "c-usr", home: "c-home" };
+  // Foto de banner com dois recortes: faixa larga no computador e mais alta no celular (ex.: /img/insumos-2000.webp e insumos-m-640.webp).
+  const bannerFoto = (foto, cls = "") => `<picture>
+      <source media="(max-width: 860px)" srcset="/img/${foto}-m-640.webp 640w, /img/${foto}-m-1000.webp 1000w" sizes="100vw">
+      <img class="${cls}" src="/img/${foto}-1200.webp" srcset="/img/${foto}-1200.webp 1200w, /img/${foto}-2000.webp 2000w" sizes="(max-width: 1180px) 100vw, 1060px" alt="" decoding="async"></picture>`;
   // Cabeçalho com foto (Insumos e Fichas): título e descrição sobre a imagem.
-  const pageBanner = (foto, ic, titulo, desc) => `<div class="page-banner"><img src="/img/${foto}.webp" alt="" decoding="async"><div class="pb-in"><div class="page-icon">${icon(ic)}</div><div class="pb-txt"><h1 class="page-title">${esc(titulo)}</h1><p>${desc}</p></div></div></div>`;
+  const pageBanner = (foto, ic, titulo, desc) => `<div class="page-banner">${bannerFoto(foto, "pb-photo")}<div class="pb-in"><div class="page-icon">${icon(ic)}</div><div class="pb-txt"><h1 class="page-title">${esc(titulo)}</h1><p>${desc}</p></div></div></div>`;
   const pageHead = (ic, titulo, desc) => `<div class="page-head"><div class="page-icon ${COR[ic] || ""}">${icon(ic)}</div><h1 class="page-title">${esc(titulo)}</h1></div>${desc ? `<p class="page-desc">${desc}</p>` : '<div style="height:14px"></div>'}`;
 
   function upsell(msg) {
@@ -400,7 +404,7 @@
     const vazio = !S.insumos.length;
 
     $("#view").innerHTML = `<div class="page wide">
-      <div class="hello"><img class="hello-photo" src="/img/bancada.webp" alt="" decoding="async">
+      <div class="hello">${bannerFoto("bancada", "hello-photo")}
         <div class="hello-in"><div><p class="hello-date">${new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" })}</p><h1>${saud}, ${esc((me.nome || "").split(" ")[0])}!</h1>
           <p class="hello-sum">${vazio ? "Vamos montar sua primeira ficha técnica?" : comVenda.length ? `CMV médio de <b>${pct(cmvMedio)}</b> em ${comVenda.length} ficha${comVenda.length > 1 ? "s" : ""} com preço de venda.` : `${me.uso.insumos} insumo${me.uso.insumos === 1 ? "" : "s"} e ${me.uso.receitas} ficha${me.uso.receitas === 1 ? "" : "s"} cadastrados.`}</p></div>
         <span class="tag ${isPro() ? "green" : ""}">${isPro() ? `Pro até ${dataBR(me.proAte)}` : "Plano Free"}</span></div></div>
@@ -411,7 +415,7 @@
         <button data-act="ficha">${'<span class="q-ico c-fic">'}${icon("book")}</span>Nova ficha</button>
         <button data-act="imp">${'<span class="q-ico c-his">'}${icon("upload")}</span>Importar lista</button>
       </div>
-      ${vazio ? `<div class="panel empty-state"><img class="ill-photo" src="/img/insumos.webp" alt=""><h3>Comece pelos seus insumos</h3><p>Cadastre o que você compra, com a embalagem e o preço. Depois monte as fichas técnicas: o custo é calculado sozinho.</p><button class="btn primary" data-act="ins">${icon("plus")}Cadastrar primeiro insumo</button></div>` : `
+      ${vazio ? `<div class="panel empty-state"><img class="ill-photo" src="/img/insumos-m-640.webp" alt=""><h3>Comece pelos seus insumos</h3><p>Cadastre o que você compra, com a embalagem e o preço. Depois monte as fichas técnicas: o custo é calculado sozinho.</p><button class="btn primary" data-act="ins">${icon("plus")}Cadastrar primeiro insumo</button></div>` : `
       <div class="kpis">
         ${kpi("#insumos", "box", "c-ins", "Insumos", me.uso.insumos, me.limites.insumos != null ? `de ${me.limites.insumos} no Free` : "cadastrados")}
         ${kpi("#fichas", "book", "c-fic", "Fichas técnicas", me.uso.receitas, me.limites.receitas != null ? `de ${me.limites.receitas} no Free` : "cadastradas")}
@@ -494,7 +498,7 @@
     const q = norm(S.q);
     const list = S.insumos.filter((i) => !q || norm(i.nome).includes(q));
     if (!S.insumos.length) {
-      const vazio = `<div class="empty-state"><img class="ill-photo" src="/img/insumos.webp" alt=""><h3>Nenhum insumo ainda</h3><p>Cadastre o que você compra, com a embalagem e o preço. Ou importe uma lista como “Arroz, 1kg, 3,60”.</p></div>`;
+      const vazio = `<div class="empty-state"><img class="ill-photo" src="/img/insumos-m-640.webp" alt=""><h3>Nenhum insumo ainda</h3><p>Cadastre o que você compra, com a embalagem e o preço. Ou importe uma lista como “Arroz, 1kg, 3,60”.</p></div>`;
       tb.innerHTML = `<tr><td colspan="6">${vazio}</td></tr>`; lista.innerHTML = vazio; return;
     }
     if (!list.length) { const n = `<div class="empty">Nada encontrado para “${esc(S.q)}”.</div>`; tb.innerHTML = `<tr><td colspan="6">${n}</td></tr>`; lista.innerHTML = n; return; }
@@ -660,7 +664,7 @@
         <div class="search-wrap">${icon("search")}<input class="search" id="q" type="search" placeholder="Buscar…" value="${esc(S.qRec)}" aria-label="Buscar ficha"></div>
         <button class="btn primary desktop-only" id="nova">${icon("plus")}Nova</button></div>
       <div class="gallery">
-        ${!S.receitas.length ? `<div class="empty-state mobile-only" style="grid-column:1/-1"><img class="ill-photo" src="/img/fichas.webp" alt=""><h3>Nenhuma ficha ainda</h3><p>Toque no + para montar a primeira ficha técnica com os seus insumos.</p></div>` : ""}
+        ${!S.receitas.length ? `<div class="empty-state mobile-only" style="grid-column:1/-1"><img class="ill-photo" src="/img/fichas-m-640.webp" alt=""><h3>Nenhuma ficha ainda</h3><p>Toque no + para montar a primeira ficha técnica com os seus insumos.</p></div>` : ""}
         ${list.map((r) => {
           if (r.bloqueado) return `<button class="gcard locked" data-bloq="1" data-id="${r.id}">
             <div class="cover"><span>${icon("lock").replace("<svg", '<svg style="width:26px;height:26px"')}</span></div>
