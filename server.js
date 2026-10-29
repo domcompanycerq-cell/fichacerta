@@ -112,23 +112,35 @@ function validarInsumo(body) {
 }
 
 /* ---------------- autenticação ---------------- */
-app.post("/api/auth/cadastro", h(async (req, res) => {
-  const nome = txt(req.body.nome, 100), email = txt(req.body.email, 160).toLowerCase();
-  const telefone = soDigitos(req.body.telefone), senha = String(req.body.senha || "");
-  if (await auth.limitarTentativas(`cad:${req.ip}`, 10, 60 * 60e3)) return erro(res, 429, "Muitos cadastros a partir desta rede. Tente mais tarde.");
-  if (nome.length < 2) return erro(res, 400, "Informe seu nome.");
-  if (!(telefone.length === 10 || telefone.length === 11)) return erro(res, 400, "Informe o telefone com DDD, por exemplo (15) 99999-9999.");
-  if (!EMAIL_RE.test(email)) return erro(res, 400, "Informe um e-mail válido.");
-  if (senha.length < 8) return erro(res, 400, "A senha precisa ter pelo menos 8 caracteres.");
+// Validação e criação de conta, usadas pelo cadastro do próprio usuário e pelo painel admin.
+function validarCadastro(body) {
+  const nome = txt(body.nome, 100), email = txt(body.email, 160).toLowerCase();
+  const telefone = soDigitos(body.telefone), senha = String(body.senha || "");
+  if (nome.length < 2) return { erro: "Informe o nome." };
+  if (!(telefone.length === 10 || telefone.length === 11)) return { erro: "Informe o telefone com DDD, por exemplo (15) 99999-9999." };
+  if (!EMAIL_RE.test(email)) return { erro: "Informe um e-mail válido." };
+  if (senha.length < 8) return { erro: "A senha precisa ter pelo menos 8 caracteres." };
+  return { nome, email, telefone, senha };
+}
+async function criarConta({ nome, email, telefone, senha }, ultimoAcesso = now()) {
   const hash = await auth.hashSenha(senha);
   const novo = await get(
     "INSERT INTO users (nome, email, telefone, senha_hash, criado_em, ultimo_acesso) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (email) DO NOTHING RETURNING *",
-    nome, email, telefone, hash, now(), now());
-  if (!novo) return erro(res, 409, "Este e-mail já tem cadastro. Faça login ou recupere a senha.");
+    nome, email, telefone, hash, now(), ultimoAcesso);
+  if (!novo) return null;
   await run("INSERT INTO notificacoes (user_id, titulo, mensagem, tipo, criado_em) VALUES ($1,$2,$3,$4,$5)", novo.id,
     `Boas-vindas ao ${notif.APP_NAME}`,
     "Comece cadastrando seus insumos com embalagem e preço. Depois monte as fichas técnicas: o custo é calculado sozinho e se atualiza sempre que um preço mudar.",
     "sistema", now());
+  return novo;
+}
+
+app.post("/api/auth/cadastro", h(async (req, res) => {
+  if (await auth.limitarTentativas(`cad:${req.ip}`, 10, 60 * 60e3)) return erro(res, 429, "Muitos cadastros a partir desta rede. Tente mais tarde.");
+  const dados = validarCadastro(req.body);
+  if (dados.erro) return erro(res, 400, dados.erro === "Informe o nome." ? "Informe seu nome." : dados.erro);
+  const novo = await criarConta(dados);
+  if (!novo) return erro(res, 409, "Este e-mail já tem cadastro. Faça login ou recupere a senha.");
   await auth.criarSessao(req, res, novo.id);
   res.status(201).json({ user: await userOut(novo) });
 }));
@@ -499,6 +511,18 @@ admin.get("/usuarios", h(async (req, res) => {
   res.json({ usuarios: lista });
 }));
 
+// Cadastro feito pelo administrador. Sem senha informada, o painel gera uma e mostra uma única vez.
+admin.post("/usuarios", h(async (req, res) => {
+  const gerada = !String(req.body.senha || "").trim();
+  const senha = gerada ? crypto.randomBytes(9).toString("base64url") : String(req.body.senha);
+  const dados = validarCadastro({ ...req.body, senha });
+  if (dados.erro) return erro(res, 400, dados.erro);
+  const novo = await criarConta(dados, null);
+  if (!novo) return erro(res, 409, "Este e-mail já tem cadastro.");
+  await logAdmin(req, novo.id, "cadastro", "conta criada pelo painel");
+  res.status(201).json({ usuario: adminUserOut({ ...novo, n_insumos: 0, n_receitas: 0, total_pago: 0 }), senha: gerada ? senha : null });
+}));
+
 admin.get("/usuarios/:id", h(async (req, res) => {
   const u = await get(`${SQL_USUARIOS} WHERE u.id = $1`, Number(req.params.id) || 0);
   if (!u) return erro(res, 404, "Usuário não encontrado.");
@@ -534,26 +558,40 @@ admin.post("/usuarios/:id/liberar", h(async (req, res) => {
   await notif.notificar(u.id, "Conta liberada", "Seu acesso foi liberado. Bom trabalho na cozinha!", { tipo: "sistema" });
   res.json({ ok: true });
 }));
+// Liberação do Pro em duas etapas: o painel pede a prévia (vencimento e valor) e só grava quando o admin conclui.
+// Aceita { dias } (soma ao período atual) ou { ate: "AAAA-MM-DD" } (vencimento exato).
+function calcularPro(u, body) {
+  if (body.ate) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(body.ate))) return { erro: "Data inválida." };
+    const d = new Date(`${body.ate}T23:59:59-03:00`); // fim do dia no horário de Brasília
+    if (isNaN(d)) return { erro: "Data inválida." };
+    if (d.getTime() <= Date.now()) return { erro: "Escolha uma data no futuro." };
+    const ate = d.toISOString();
+    const base = u.pro_ate && Date.parse(u.pro_ate) > Date.now() ? Date.parse(u.pro_ate) : Date.now();
+    const dias = Math.max(0, Math.ceil((d.getTime() - base) / 864e5));
+    return { modo: "data", ate, dias, ...planos.valorLiberacao(u, Math.max(1, dias)) };
+  }
+  const dias = Math.max(1, Math.min(3660, parseInt(body.dias, 10) || 30));
+  return { modo: "dias", ate: planos.novoVencimento(u, dias), dias, ...planos.valorLiberacao(u, dias) };
+}
+admin.post("/usuarios/:id/pro/previa", h(async (req, res) => {
+  const u = await alvo(req, res); if (!u) return;
+  const c = calcularPro(u, req.body);
+  if (c.erro) return erro(res, 400, c.erro);
+  res.json({ proAteAtual: planos.proAtivo(u) ? u.pro_ate : null, proAte: c.ate, dias: c.dias, valor: c.valor, comOferta: c.comOferta });
+}));
 admin.post("/usuarios/:id/pro", h(async (req, res) => {
   const u = await alvo(req, res); if (!u) return;
+  const c = calcularPro(u, req.body);
+  if (c.erro) return erro(res, 400, c.erro);
+  // O admin pode corrigir o valor recebido (ex.: desconto combinado no WhatsApp).
+  const valor = req.body.valor != null && req.body.valor !== "" ? Calc.parseNum(req.body.valor) : c.valor;
+  if (req.body.registrarPagamento && !(valor >= 0 && valor <= 1e6)) return erro(res, 400, "Informe um valor válido, por exemplo 25,00.");
   let ate;
-  if (req.body.ate) {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(req.body.ate))) return erro(res, 400, "Data inválida.");
-    const d = new Date(`${req.body.ate}T23:59:59-03:00`); // fim do dia no horário de Brasília
-    if (isNaN(d)) return erro(res, 400, "Data inválida.");
-    ate = d.toISOString();
-    await planos.definirProAte(u.id, ate);
-  } else {
-    const dias = Math.max(1, Math.min(3660, parseInt(req.body.dias, 10) || 30));
-    // Primeira assinatura: os primeiros 30 dias saem pelo preço da oferta; o restante, pelo preço normal.
-    const comOferta = planos.ofertaDisponivel(u);
-    const meses = Math.max(1, Math.round(dias / 30));
-    const valor = comOferta ? planos.PRECO_OFERTA + planos.PRECO_PRO * (meses - 1) : planos.PRECO_PRO * meses;
-    ate = await planos.estenderPro(u.id, dias);
-    if (req.body.registrarPagamento) await run("INSERT INTO pagamentos (user_id, valor, status, provider, dias, criado_em, aprovado_em) VALUES ($1,$2,$3,$4,$5,$6,$7)",
-      u.id, valor, "manual", comOferta ? "whatsapp-oferta" : "whatsapp", dias, now(), now());
-  }
-  await logAdmin(req, u.id, "pro", `até ${ate.slice(0, 10)}`);
+  if (c.modo === "data") { ate = c.ate; await planos.definirProAte(u.id, ate); } else ate = await planos.estenderPro(u.id, c.dias);
+  if (req.body.registrarPagamento) await run("INSERT INTO pagamentos (user_id, valor, status, provider, dias, criado_em, aprovado_em) VALUES ($1,$2,$3,$4,$5,$6,$7)",
+    u.id, Math.round(valor * 100) / 100, "manual", c.comOferta ? "whatsapp-oferta" : "whatsapp", Math.max(1, c.dias), now(), now());
+  await logAdmin(req, u.id, "pro", `até ${ate.slice(0, 10)}${req.body.registrarPagamento ? ` · pagamento ${valor.toFixed(2).replace(".", ",")}` : ""}`);
   await notif.notificar(u.id, "Plano Pro ativo", `Seu plano Pro está ativo até ${new Date(ate).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}. Insumos e fichas ilimitados e histórico de preços liberados.`, { tipo: "sistema", email: true });
   res.json({ ok: true, proAte: ate });
 }));

@@ -26,17 +26,18 @@ App web (instalável no celular) para cozinhas: o usuário cadastra insumos (nom
 | Fichas técnicas | até 2 | ilimitadas |
 | Histórico de preços | não | sim |
 
-**Oferta de boas-vindas:** quem nunca assinou paga **R$ 10 nos primeiros 30 dias** do Pro (depois, R$ 25/mês). O app mostra a oferta no Início, no menu e na página de plano, e a mensagem do WhatsApp já pede a oferta. No painel admin, o usuário elegível aparece com a etiqueta "Oferta 1º mês"; ao clicar em **+30 dias** com "registrar como pagamento recebido", o pagamento é gravado como R$ 10. A oferta vale uma vez por conta. O valor muda em `PRO_PRICE_OFERTA`.
+**Oferta de boas-vindas:** quem nunca assinou paga **R$ 10 nos primeiros 30 dias** do Pro (depois, R$ 25/mês). O app mostra a oferta no Início, no menu e na página de plano, e a mensagem do WhatsApp já pede a oferta. No painel admin, o usuário elegível aparece com a etiqueta "Oferta 1º mês"; ao liberar 30 dias com "registrar pagamento recebido", o valor sugerido é R$ 10. A oferta vale uma vez por conta. O valor muda em `PRO_PRICE_OFERTA`.
 
 Os limites valem no servidor. Se o Pro vence (ou o admin volta a conta ao Free), **nada é apagado**: ficam liberados os 10 insumos e as 2 fichas mais antigos, e o restante fica **bloqueado**. Itens bloqueados aparecem com um cadeado, não podem ser editados, excluídos nem usados em fichas novas, e o conteúdo das fichas bloqueadas fica oculto. Ao renovar o Pro, tudo é desbloqueado na hora.
 
 **Painel admin** (`/admin`)
 - Indicadores: usuários, assinantes, receita mensal, vencendo, vencidos, bloqueados, gráfico de cadastros.
-- Por usuário: liberar Pro (+30/+90/+365 dias ou até uma data), voltar ao Free, bloquear com motivo e liberar, senha temporária, lembrete de renovação, link de WhatsApp.
+- Novo usuário: cadastro feito pelo admin (nome, telefone, e-mail e senha; sem senha, o painel gera uma e mostra uma única vez, com a mensagem de acesso pronta para copiar).
+- Por usuário: liberar Pro em duas etapas (escolhe +30/+60/+90 dias, +6 meses, +1 ano ou uma data; confere o resumo com o novo vencimento e o valor, que pode ser ajustado; e só então clica em **Concluir liberação**), voltar ao Free, bloquear com motivo e liberar, senha temporária, lembrete de renovação, link de WhatsApp.
 - Notificações em massa (app, e-mail e links de WhatsApp prontos).
 - Lembretes automáticos de renovação: 7 dias antes, 1 dia antes e no vencimento (tarefa diária da Vercel).
 
-**Pagamento:** não há pagamento online. "Assinar" e "Renovar" abrem o WhatsApp do suporte (`SUPORTE_WHATSAPP`) com a mensagem pronta e o e-mail do usuário. Depois de confirmar o pagamento, o admin clica em **+30 dias** no painel.
+**Pagamento:** não há pagamento online. "Assinar" e "Renovar" abrem o WhatsApp do suporte (`SUPORTE_WHATSAPP`) com a mensagem pronta e o e-mail do usuário. Depois de confirmar o pagamento, o admin escolhe o período no painel e clica em **Concluir liberação**.
 
 ## Estrutura
 

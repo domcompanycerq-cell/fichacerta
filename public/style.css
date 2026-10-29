@@ -497,6 +497,14 @@ table.db .title-cell svg { width: 16px; height: 16px; color: var(--text-3); flex
 .offer .btn { background: #fff; color: var(--accent); border-color: #fff; }
 .offer .btn:hover { background: #fff6f1; }
 
+/* ---------- painel admin: liberação do Pro em duas etapas ---------- */
+.pro-opcoes .btn[aria-pressed="true"] { border-color: var(--brand); background: var(--brand-soft); color: var(--brand); box-shadow: 0 0 0 1px var(--brand); }
+.pro-resumo { margin-top: 12px; border: 1px solid var(--brand); background: color-mix(in srgb, var(--brand-soft) 55%, var(--surface)); border-radius: var(--radius); padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; animation: sobe .18s ease-out; }
+.pr-linha { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; border-bottom: 1px dashed var(--line-strong); padding-bottom: 6px; }
+.pr-linha span { color: var(--text-2); }
+.pr-linha b { font-family: var(--font-mono); font-weight: 600; }
+.pr-destaque { color: var(--brand); }
+
 /* ---------- notificações / linha do tempo ---------- */
 .list { display: flex; flex-direction: column; }
 .list-item { display: flex; gap: 12px; padding: 14px 4px; border-bottom: 1px solid var(--line); }

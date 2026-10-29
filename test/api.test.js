@@ -282,3 +282,57 @@ test("oferta: primeiro mês do Pro por R$ 10, só na primeira assinatura", async
   await a("POST", `/api/admin/usuarios/${u2.id}/pro`, { dias: 90, registrarPagamento: true });
   assert.deepEqual((await u2.c("GET", "/api/assinatura")).body.pagamentos.map((p) => p.valor), [60]);
 });
+
+test("admin cadastra usuário pelo painel, com senha gerada ou informada", async () => {
+  const a = cliente();
+  await a("POST", "/api/auth/login", { email: "admin@teste.com", senha: "admin-senha-123" });
+  const c = cliente();
+  await c("POST", "/api/auth/cadastro", { nome: "Comum", telefone: "15998765432", email: "comum@x.com", senha: "senha-forte-1" });
+  assert.equal((await c("POST", "/api/admin/usuarios", { nome: "Invasor", telefone: "15998765432", email: "inv@x.com" })).status, 403, "só admin cadastra pelo painel");
+
+  assert.equal((await a("POST", "/api/admin/usuarios", { nome: "B", telefone: "1", email: "x" })).status, 400);
+  const r = await a("POST", "/api/admin/usuarios", { nome: "Bruno Dias", telefone: "(15) 99777-1234", email: "Bruno@X.com" });
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  assert.equal(r.body.usuario.email, "bruno@x.com");
+  assert.equal(r.body.usuario.plano, "free");
+  assert.ok(r.body.senha && r.body.senha.length >= 8, "senha gerada volta uma única vez");
+  assert.equal((await a("POST", "/api/admin/usuarios", { nome: "Bruno", telefone: "15997771234", email: "bruno@x.com" })).status, 409);
+  // o novo usuário entra com a senha gerada e não fica com a sessão do admin
+  const b = cliente();
+  assert.equal((await b("POST", "/api/auth/login", { email: "bruno@x.com", senha: r.body.senha })).status, 200);
+  assert.equal((await a("GET", "/api/me")).body.user.role, "admin");
+  // senha informada pelo admin
+  const r2 = await a("POST", "/api/admin/usuarios", { nome: "Carla Reis", telefone: "15997770000", email: "carla@x.com", senha: "carla-senha-1" });
+  assert.equal(r2.status, 201);
+  assert.equal(r2.body.senha, null);
+  assert.equal((await cliente()("POST", "/api/auth/login", { email: "carla@x.com", senha: "carla-senha-1" })).status, 200);
+  const log = (await a("GET", "/api/admin/log")).body.log;
+  assert.ok(log.some((l) => l.acao === "cadastro" && l.usuario === "Carla Reis"));
+});
+
+test("liberação do Pro: a prévia não muda nada; só a conclusão libera e registra o pagamento", async () => {
+  const { c, id } = await novoUsuario("previa@x.com");
+  const a = cliente();
+  await a("POST", "/api/auth/login", { email: "admin@teste.com", senha: "admin-senha-123" });
+  const p = await a("POST", `/api/admin/usuarios/${id}/pro/previa`, { dias: 60 });
+  assert.equal(p.status, 200);
+  assert.equal(p.body.proAteAtual, null);
+  assert.equal(p.body.valor, 35, "oferta no 1º mês + 1 mês cheio");
+  assert.equal(p.body.comOferta, true);
+  const dias = Math.round((Date.parse(p.body.proAte) - Date.now()) / 864e5);
+  assert.equal(dias, 60);
+  // nada mudou ainda
+  assert.equal((await c("GET", "/api/me")).body.user.plano, "free");
+  assert.equal((await c("GET", "/api/assinatura")).body.pagamentos.length, 0);
+  assert.equal((await a("POST", `/api/admin/usuarios/${id}/pro/previa`, { ate: "2001-01-01" })).status, 400);
+  // conclusão com valor ajustado pelo admin
+  const ok = await a("POST", `/api/admin/usuarios/${id}/pro`, { dias: 60, registrarPagamento: true, valor: "30,00" });
+  assert.equal(ok.status, 200);
+  assert.equal((await c("GET", "/api/me")).body.user.plano, "pro");
+  assert.deepEqual((await c("GET", "/api/assinatura")).body.pagamentos.map((x) => [x.valor, x.dias]), [[30, 60]]);
+  // nova prévia soma ao vencimento atual
+  const p2 = await a("POST", `/api/admin/usuarios/${id}/pro/previa`, { dias: 30 });
+  assert.equal(p2.body.proAteAtual, ok.body.proAte);
+  assert.equal(p2.body.valor, 25);
+  assert.equal((await a("POST", `/api/admin/usuarios/${id}/pro`, { dias: 30, registrarPagamento: true, valor: "abc" })).status, 400);
+});

@@ -76,6 +76,13 @@
     return '<span class="faint">—</span>';
   }
   const statusTag = (u) => (u.status === "bloqueado" ? `<span class="tag red">Bloqueado</span>` : `<span class="tag green">Ativo</span>`);
+  const mascaraTel = (v) => {
+    const d = v.replace(/\D/g, "").slice(0, 11);
+    if (d.length <= 2) return d.length ? `(${d}` : "";
+    if (d.length <= 6) return `(${d.slice(0, 2)}) ${d.slice(2)}`;
+    if (d.length <= 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
+    return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+  };
   const wa = (u, msg) => {
     let d = String(u.telefone || "").replace(/\D/g, ""); if (d.length === 10 || d.length === 11) d = "55" + d;
     return `https://wa.me/${d}${msg ? `?text=${encodeURIComponent(msg)}` : ""}`;
@@ -90,7 +97,7 @@
       S.resumo = r;
       const conv = r.total ? (r.pro / r.total) * 100 : 0;
       $("#vg").innerHTML = `
-        <div class="callout">${icon("info")}<div class="ct small">Os usuários pagam pelo WhatsApp do suporte (+${esc(r.suporteWhatsApp)}). Depois de confirmar o pagamento, abra o usuário em <a href="#usuarios">Usuários</a> e clique em <b>+30 dias</b> com “registrar como pagamento recebido” marcado.${!r.emailAtivo ? "<br><b>E-mail desativado:</b> configure SMTP no .env para enviar lembretes e recuperação de senha por e-mail. As notificações dentro do app funcionam normalmente." : ""}</div></div>
+        <div class="callout">${icon("info")}<div class="ct small">Os usuários pagam pelo WhatsApp do suporte (+${esc(r.suporteWhatsApp)}). Depois de confirmar o pagamento, abra o usuário em <a href="#usuarios">Usuários</a>, escolha o período do Pro, confira o resumo e clique em <b>Concluir liberação</b>.${!r.emailAtivo ? "<br><b>E-mail desativado:</b> configure SMTP no .env para enviar lembretes e recuperação de senha por e-mail. As notificações dentro do app funcionam normalmente." : ""}</div></div>
         <div class="stats">
           <div class="stat"><span>Usuários</span><b>${r.total}</b><small>${r.novos30} novos em 30 dias</small></div>
           <div class="stat"><span>Assinantes Pro</span><b>${r.pro}</b><small>${fmt(conv, 1)}% da base</small></div>
@@ -149,7 +156,9 @@
 
   async function viewUsuarios() {
     crumb("Usuários");
-    $("#view").innerHTML = `<div class="page wide">${head("users", "Usuários", "Clique em um usuário para liberar o Pro, bloquear o acesso ou enviar uma mensagem.")}
+    $("#topActions").innerHTML = `<button class="btn primary" id="novoU">${icon("plus")}Novo usuário</button>`;
+    $("#novoU").onclick = novoUsuario;
+    $("#view").innerHTML = `<div class="page wide">${head("users", "Usuários", "Clique em um usuário para liberar o Pro, bloquear o acesso ou enviar uma mensagem. Para cadastrar alguém, use <b>Novo usuário</b>.")}
       <div class="db-toolbar"><div class="tabs" id="tabs">${FILTROS.map(([k, t]) => `<button data-f="${k}" aria-pressed="${S.filtro === k}">${t}</button>`).join("")}</div>
         <span class="spacer"></span><input class="search" id="q" type="search" placeholder="Nome, e-mail ou telefone" value="${esc(S.q)}" aria-label="Buscar usuário"></div>
       <div id="bulk" class="row" style="padding:8px 0" hidden><span class="small" id="bulkN"></span><button class="btn" id="bulkNotify">${icon("send")}Notificar selecionados</button><button class="btn ghost" id="bulkClear">Limpar seleção</button></div>
@@ -175,6 +184,55 @@
   }
   function bulkBar() { const b = $("#bulk"); if (!b) return; b.hidden = !S.sel.size; $("#bulkN").textContent = `${S.sel.size} selecionado(s)`; }
 
+  /* ---------- cadastro pelo painel ---------- */
+  function novoUsuario() {
+    const m = overlay(`<div class="modal" role="dialog" aria-modal="true" aria-label="Novo usuário"><div class="sheet-grab"></div>
+      <h2>Novo usuário</h2>
+      <p class="muted small" style="margin:0 0 12px">A conta começa no plano Free. Depois de criar, você pode liberar o Pro na mesma hora.</p>
+      <form id="nuf" novalidate style="display:flex;flex-direction:column;gap:10px">
+        <div class="field"><label for="nuNome">Nome</label><input class="input" id="nuNome" autocomplete="off" required></div>
+        <div class="field"><label for="nuTel">DDD + telefone</label><input class="input" id="nuTel" type="tel" inputmode="tel" placeholder="(15) 99999-9999" required></div>
+        <div class="field"><label for="nuEmail">E-mail</label><input class="input" id="nuEmail" type="email" autocomplete="off" required></div>
+        <div class="field"><label for="nuSenha">Senha</label><input class="input" id="nuSenha" type="text" autocomplete="new-password" minlength="8" placeholder="Em branco: o painel gera uma senha"></div>
+        <div class="err" id="nuErr"></div>
+        <div class="row" style="justify-content:flex-end"><button class="btn ghost" type="button" id="nuCancel">Cancelar</button><button class="btn primary" type="submit" id="nuGo">${icon("plus")}Criar conta</button></div>
+      </form></div>`, { center: true });
+    const tel = $("#nuTel", m.root); tel.addEventListener("input", () => { tel.value = mascaraTel(tel.value); });
+    $("#nuCancel", m.root).onclick = m.close;
+    setTimeout(() => $("#nuNome", m.root).focus(), 50);
+    $("#nuf", m.root).addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const btn = $("#nuGo", m.root); btn.disabled = true; $("#nuErr", m.root).textContent = "";
+      const senhaDigitada = $("#nuSenha", m.root).value;
+      try {
+        const r = await api("POST", "/api/admin/usuarios", { nome: $("#nuNome", m.root).value, telefone: tel.value, email: $("#nuEmail", m.root).value, senha: senhaDigitada });
+        contaCriada(m, r.usuario, r.senha || senhaDigitada, !!r.senha);
+        if (location.hash.startsWith("#usuarios")) carregar();
+      } catch (ex) { $("#nuErr", m.root).textContent = ex.message; btn.disabled = false; }
+    });
+  }
+  // Depois de criar: mostra os dados de acesso uma única vez, com a mensagem pronta para copiar.
+  function contaCriada(m, u, senha, gerada) {
+    const primeiro = u.nome.split(" ")[0];
+    const msg = `Olá, ${primeiro}! Sua conta no CMV Certo está pronta.\nAcesse: ${location.origin}\nE-mail: ${u.email}\nSenha: ${senha}\nDepois do primeiro acesso, troque a senha em Mais > Meus dados.`;
+    $(".modal", m.root).innerHTML = `<div class="sheet-grab"></div>
+      <h2>Conta criada</h2>
+      <div class="callout green">${icon("check")}<div class="ct"><b>${esc(u.nome)}</b> já pode entrar no app.</div></div>
+      <div class="props" style="margin:4px 0 10px">
+        <div class="k">${icon("send")}E-mail</div><div class="v" style="padding:6px"><span style="user-select:all">${esc(u.email)}</span></div>
+        <div class="k">${icon("lock")}Senha</div><div class="v" style="padding:6px"><b class="num" style="user-select:all">${esc(senha)}</b>${gerada ? ' <span class="small faint">gerada agora, não aparece de novo</span>' : ""}</div>
+      </div>
+      <div class="row"><button class="btn primary" id="ccCopy">Copiar mensagem de acesso</button><a class="btn" href="${wa(u)}" target="_blank" rel="noopener">Abrir WhatsApp</a></div>
+      <p class="small muted" style="margin:8px 0 14px">Copie a mensagem, abra o WhatsApp do usuário e cole.</p>
+      <div class="row" style="justify-content:space-between"><button class="btn ghost" id="ccClose">Fechar</button><button class="btn" id="ccOpen">${icon("card")}Abrir usuário e liberar Pro</button></div>`;
+    $("#ccCopy", m.root).onclick = async () => {
+      try { await navigator.clipboard.writeText(msg); toast("Mensagem copiada."); }
+      catch (e) { toast("Não deu para copiar. Selecione o e-mail e a senha na tela."); }
+    };
+    $("#ccClose", m.root).onclick = m.close;
+    $("#ccOpen", m.root).onclick = () => { m.close(); peekUsuario(u.id); };
+  }
+
   async function peekUsuario(id) {
     let d;
     try { d = await api("GET", `/api/admin/usuarios/${id}`); } catch (e) { return falha(e); }
@@ -194,15 +252,13 @@
         </div>
 
         <div class="h2" style="font-size:16px">Plano Pro</div>
-        <div class="row">
-          <button class="btn primary" data-pro="30">+30 dias</button><button class="btn" data-pro="90">+90 dias</button><button class="btn" data-pro="365">+1 ano</button>
-          <label class="row small muted" style="gap:4px"><input type="checkbox" id="regPag" checked> registrar como pagamento recebido</label>
+        <p class="small muted" style="margin:0 0 8px"><b>1.</b> Escolha o período. <b>2.</b> Confira o resumo e clique em <b>Concluir liberação</b>. Nada muda antes da conclusão.</p>
+        <div class="row pro-opcoes" role="group" aria-label="Período do Pro">
+          ${[[30, "+30 dias"], [60, "+60 dias"], [90, "+90 dias"], [180, "+6 meses"], [365, "+1 ano"]].map(([d, t]) => `<button class="btn" type="button" data-pro="${d}" aria-pressed="false">${t}</button>`).join("")}
         </div>
-        ${u.ofertaDisponivel ? `<p class="small muted" style="margin:6px 0 0">Primeira assinatura: os primeiros 30 dias são registrados pelo valor da oferta (${brl(S.resumo ? S.resumo.precoOferta : 10)}); meses extras, pelo preço normal.</p>` : ""}
-        <div>
-        </div>
-        <div class="row" style="margin-top:8px"><label class="small muted" for="ate">Ou definir vencimento</label><input class="input" type="date" id="ate" style="width:auto"><button class="btn" id="setAte">Aplicar</button>
-          ${u.plano === "pro" || u.vencido ? `<button class="btn ghost danger" id="toFree">Voltar ao Free</button>` : ""}</div>
+        <div class="row" style="margin-top:8px"><label class="small muted" for="ate">Ou vencimento exato</label><input class="input" type="date" id="ate" style="width:auto"></div>
+        <div id="proResumo"></div>
+        ${u.plano === "pro" || u.vencido ? `<div class="row" style="margin-top:10px"><button class="btn ghost danger" id="toFree">Voltar ao Free</button></div>` : ""}
 
         <div class="h2" style="font-size:16px">Acesso</div>
         ${u.status === "bloqueado"
@@ -222,8 +278,36 @@
     const reabrir = async (msg) => { toast(msg); p.close(); await peekUsuario(id); if (location.hash.startsWith("#usuarios")) carregar(); else if (location.hash.startsWith("#visao") || !location.hash) viewVisao(); };
     const acao = async (url, body, msg) => { try { await api("POST", url, body); await reabrir(msg); } catch (e) { pe.textContent = e.message; } };
     $("#pc", p.root).onclick = p.close;
-    $$("[data-pro]", p.root).forEach((b) => b.addEventListener("click", () => acao(`/api/admin/usuarios/${id}/pro`, { dias: Number(b.dataset.pro), registrarPagamento: $("#regPag").checked }, `Pro estendido em ${b.dataset.pro} dias.`)));
-    $("#setAte", p.root).onclick = () => { const v = $("#ate").value; if (!v) { pe.textContent = "Escolha uma data."; return; } acao(`/api/admin/usuarios/${id}/pro`, { ate: v }, `Vencimento definido para ${v.split("-").reverse().join("/")}.`); };
+    // Pro: escolher o período só monta o resumo; a liberação acontece em "Concluir liberação".
+    const box = $("#proResumo", p.root), dataIn = $("#ate", p.root);
+    const marcar = (b) => $$("[data-pro]", p.root).forEach((x) => x.setAttribute("aria-pressed", x === b ? "true" : "false"));
+    const limpar = () => { marcar(null); dataIn.value = ""; box.innerHTML = ""; };
+    async function resumoPro(escolha, rotulo) {
+      pe.textContent = "";
+      let r;
+      try { r = await api("POST", `/api/admin/usuarios/${id}/pro/previa`, escolha); } catch (e) { box.innerHTML = ""; pe.textContent = e.message; return; }
+      const fmtValor = (n) => n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      box.innerHTML = `<div class="pro-resumo">
+        <div class="pr-linha"><span>Período escolhido</span><b>${esc(rotulo)}</b></div>
+        <div class="pr-linha"><span>Vencimento atual</span><b>${r.proAteAtual ? dataBR(r.proAteAtual) : "sem Pro ativo"}</b></div>
+        <div class="pr-linha"><span>Novo vencimento</span><b class="pr-destaque">${dataBR(r.proAte)}</b></div>
+        <label class="row small" style="gap:6px;margin-top:6px"><input type="checkbox" id="regPag" checked> Registrar pagamento recebido</label>
+        <div class="row" id="valWrap" style="gap:6px"><label class="small muted" for="valPag">Valor recebido (R$)</label><input class="input" id="valPag" inputmode="decimal" style="width:120px" value="${fmtValor(r.valor)}">
+          ${r.comOferta ? `<span class="tag orange">1º mês com oferta</span>` : ""}</div>
+        <div class="row" style="justify-content:flex-end;margin-top:10px"><button class="btn ghost" type="button" id="proCancel">Cancelar</button><button class="btn primary" type="button" id="proOk">${icon("check")}Concluir liberação</button></div>
+      </div>`;
+      const reg = $("#regPag", box), val = $("#valPag", box);
+      reg.addEventListener("change", () => { $("#valWrap", box).hidden = !reg.checked; });
+      $("#proCancel", box).onclick = limpar;
+      $("#proOk", box).onclick = async () => {
+        $("#proOk", box).disabled = true;
+        await acao(`/api/admin/usuarios/${id}/pro`, { ...escolha, registrarPagamento: reg.checked, valor: reg.checked ? val.value : undefined },
+          `Pro liberado até ${dataBR(r.proAte)}${reg.checked ? ` · pagamento de R$ ${val.value} registrado` : ""}.`);
+        const ok = $("#proOk", box); if (ok) ok.disabled = false;
+      };
+    }
+    $$("[data-pro]", p.root).forEach((b) => b.addEventListener("click", () => { marcar(b); dataIn.value = ""; resumoPro({ dias: Number(b.dataset.pro) }, b.textContent); }));
+    dataIn.addEventListener("change", () => { marcar(null); if (dataIn.value) resumoPro({ ate: dataIn.value }, `até ${dataIn.value.split("-").reverse().join("/")}`); else box.innerHTML = ""; });
     const tf = $("#toFree", p.root); if (tf) armar(tf, "Confirmar: voltar ao Free", () => acao(`/api/admin/usuarios/${id}/free`, {}, "Usuário voltou ao plano Free."));
     const lib = $("#liberar", p.root); if (lib) lib.onclick = () => acao(`/api/admin/usuarios/${id}/liberar`, {}, "Acesso liberado.");
     const blq = $("#bloquear", p.root); if (blq) armar(blq, "Confirmar bloqueio", () => acao(`/api/admin/usuarios/${id}/bloquear`, { motivo: $("#motivo").value }, "Usuário bloqueado. Sessões encerradas."));
@@ -304,11 +388,11 @@
   /* ================= log ================= */
   async function viewLog() {
     crumb("Registro de ações");
-    $("#view").innerHTML = `<div class="page">${head("history", "Registro de ações", "Tudo o que foi feito pelo painel: liberações, bloqueios e notificações.")}<div id="lg"><div class="empty">Carregando…</div></div></div>`;
+    $("#view").innerHTML = `<div class="page">${head("history", "Registro de ações", "Tudo o que foi feito pelo painel: cadastros, liberações, bloqueios e notificações.")}<div id="lg"><div class="empty">Carregando…</div></div></div>`;
     try {
       const r = await api("GET", "/api/admin/log");
       $("#lg").innerHTML = r.log.length ? `<div class="table-wrap"><table class="db" style="min-width:0"><thead><tr><th>Data</th><th>Ação</th><th>Usuário</th><th>Detalhe</th></tr></thead><tbody>
-        ${r.log.map((l) => `<tr><td class="small num">${dataHoraBR(l.criadoEm)}</td><td><span class="tag ${l.acao === "bloqueio" ? "red" : l.acao === "pro" ? "blue" : l.acao === "liberação" ? "green" : ""}">${esc(l.acao)}</span></td><td>${esc(l.usuario || "—")}</td><td class="small muted">${esc(l.detalhe)}</td></tr>`).join("")}
+        ${r.log.map((l) => `<tr><td class="small num">${dataHoraBR(l.criadoEm)}</td><td><span class="tag ${l.acao === "bloqueio" ? "red" : l.acao === "pro" ? "blue" : l.acao === "liberação" || l.acao === "cadastro" ? "green" : ""}">${esc(l.acao)}</span></td><td>${esc(l.usuario || "—")}</td><td class="small muted">${esc(l.detalhe)}</td></tr>`).join("")}
         </tbody></table></div>` : `<div class="empty">Nenhuma ação registrada ainda.</div>`;
     } catch (e) { falha(e); }
   }
