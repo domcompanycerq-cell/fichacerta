@@ -118,5 +118,10 @@
   };
   const icon = (n) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[n] || ""}</svg>`;
 
-  window.UI = { $, $$, esc, brl, fmt, pct, dataBR, dataHoraBR, norm, telBR, relativo, api, toast, armar, overlay, icon };
+  // Marca CMV Certo: símbolo "prato conferido" (borda de prato aberta = C de custo, check saindo dela)
+  // e o nome com a primeira palavra forte e o resto em minúsculas ("CMV certo").
+  const logo = () => `<svg class="logo-svg" viewBox="0 0 512 512" aria-hidden="true"><path class="lc" d="M331 126.1A150 150 0 1 0 397 307.3"/><path class="lk" d="M180 250 240 308 420 128"/></svg>`;
+  const wordmark = (nome) => { const [a, ...b] = String(nome || "CMV Certo").split(" "); return `<span class="wordmark"><b>${esc(a)}</b>${b.length ? " " + esc(b.join(" ").toLowerCase()) : ""}</span>`; };
+
+  window.UI = { $, $$, esc, brl, fmt, pct, dataBR, dataHoraBR, norm, telBR, relativo, api, toast, armar, overlay, icon, logo, wordmark };
 })();

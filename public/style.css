@@ -15,7 +15,7 @@
   --text: #18211c;
   --text-2: #5b675f;
   --text-3: #87928b;
-  --line: #dfe4dd;
+  --line: #dce2db;
   --line-strong: #cdd4cb;
   --hover: rgba(31, 36, 33, 0.05);
   --press: rgba(31, 36, 33, 0.09);
@@ -35,10 +35,11 @@
   --purple-soft: #efe8fa;
   --orange: #d9822b;
   --orange-soft: #fbeedd;
-  --red: #d23f31;
-  --red-soft: #fce6e3;
-  --yellow-soft: #fbf3d8;
-  --yellow-ink: #6e5410;
+  /* estados (semáforo do CMV): ok = Salsa, atenção = Manteiga, alto = Páprica */
+  --red: #b23e16;
+  --red-soft: #fbe4da;
+  --yellow-soft: #fbf0c9;
+  --yellow-ink: #7a5a05;
   --good: #17694a;
 
   --callout: #f1f2ee;
@@ -46,15 +47,15 @@
   --shadow-sm: 0 1px 2px rgba(16, 24, 20, 0.06);
   --shadow: 0 1px 2px rgba(16, 24, 20, 0.05), 0 4px 14px rgba(16, 24, 20, 0.06);
   --shadow-lg: 0 10px 40px rgba(16, 24, 20, 0.18);
-  --radius: 12px;
+  --radius: 14px;
   --radius-sm: 8px;
 
   /* tags */
   --tag-gray-bg: #eceee9; --tag-gray: #3b423d;
   --tag-green-bg: #dff0e6; --tag-green: #155a39;
   --tag-blue-bg: #e1ebfb; --tag-blue: #1f4e9c;
-  --tag-red-bg: #fbe3e0; --tag-red: #9b2a1f;
-  --tag-yellow-bg: #f9efcf; --tag-yellow: #6e5410;
+  --tag-red-bg: #fbe4da; --tag-red: #b23e16;
+  --tag-yellow-bg: #fbf0c9; --tag-yellow: #7a5a05;
   --tag-orange-bg: #fbe8d6; --tag-orange: #8a4a12;
   --tag-purple-bg: #ece4f9; --tag-purple: #563592;
   --tag-brown-bg: #efe4dc; --tag-brown: #5e3b28;
@@ -67,32 +68,32 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #0f1512; --surface: #18201b; --surface-2: #222723; --sidebar: #161917;
-    --text: #e8ebe8; --text-2: #a4aca6; --text-3: #737b75; --line: #2a302c; --line-strong: #39403b;
+    --text: #e8eee9; --text-2: #9aa79f; --text-3: #6f7b73; --line: #2a352e; --line-strong: #39463e;
     --hover: rgba(255, 255, 255, 0.05); --press: rgba(255, 255, 255, 0.09); --input: #1f2420;
     --brand: #4fb383; --brand-strong: #6cc79a; --brand-soft: #1c3328; --brand-ink: #08170f; --brand-deep: #0b2a1e;
     --accent: #f07446; --accent-soft: #3b231a; --blue: #6c9cf0; --blue-soft: #1b2944;
     --purple: #a78be0; --purple-soft: #2a2140; --orange: #eba25a; --orange-soft: #3a2a17;
-    --red: #f07a6c; --red-soft: #3c1f1c; --yellow-soft: #352d14; --yellow-ink: #ecd28a; --good: #5ccb93;
+    --red: #f58a63; --red-soft: #3a1d12; --yellow-soft: #352c10; --yellow-ink: #f3c845; --good: #5cc290;
     --callout: #202521; --overlay: rgba(0, 0, 0, 0.6);
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3); --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 14px rgba(0, 0, 0, 0.25); --shadow-lg: 0 10px 40px rgba(0, 0, 0, 0.5);
     --tag-gray-bg: #2a2f2b; --tag-gray: #d5dad6; --tag-green-bg: #19382a; --tag-green: #9be0bb; --tag-blue-bg: #1c2b47; --tag-blue: #a9c4f5;
-    --tag-red-bg: #3d211e; --tag-red: #f4ada4; --tag-yellow-bg: #362e15; --tag-yellow: #ecd28a; --tag-orange-bg: #3a2817; --tag-orange: #f1c08e;
+    --tag-red-bg: #3a1d12; --tag-red: #f58a63; --tag-yellow-bg: #352c10; --tag-yellow: #f3c845; --tag-orange-bg: #3a2817; --tag-orange: #f1c08e;
     --tag-purple-bg: #2b2242; --tag-purple: #cdb9f2; --tag-brown-bg: #33261e; --tag-brown: #e0c2ae;
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --bg: #0f1512; --surface: #18201b; --surface-2: #222723; --sidebar: #161917;
-  --text: #e8ebe8; --text-2: #a4aca6; --text-3: #737b75; --line: #2a302c; --line-strong: #39403b;
+  --text: #e8eee9; --text-2: #9aa79f; --text-3: #6f7b73; --line: #2a352e; --line-strong: #39463e;
   --hover: rgba(255, 255, 255, 0.05); --press: rgba(255, 255, 255, 0.09); --input: #1f2420;
   --brand: #4fb383; --brand-strong: #6cc79a; --brand-soft: #1c3328; --brand-ink: #08170f; --brand-deep: #0b2a1e;
   --accent: #f07446; --accent-soft: #3b231a; --blue: #6c9cf0; --blue-soft: #1b2944;
   --purple: #a78be0; --purple-soft: #2a2140; --orange: #eba25a; --orange-soft: #3a2a17;
-  --red: #f07a6c; --red-soft: #3c1f1c; --yellow-soft: #352d14; --yellow-ink: #ecd28a; --good: #5ccb93;
+  --red: #f58a63; --red-soft: #3a1d12; --yellow-soft: #352c10; --yellow-ink: #f3c845; --good: #5cc290;
   --callout: #202521; --overlay: rgba(0, 0, 0, 0.6);
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3); --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 14px rgba(0, 0, 0, 0.25); --shadow-lg: 0 10px 40px rgba(0, 0, 0, 0.5);
   --tag-gray-bg: #2a2f2b; --tag-gray: #d5dad6; --tag-green-bg: #19382a; --tag-green: #9be0bb; --tag-blue-bg: #1c2b47; --tag-blue: #a9c4f5;
-  --tag-red-bg: #3d211e; --tag-red: #f4ada4; --tag-yellow-bg: #362e15; --tag-yellow: #ecd28a; --tag-orange-bg: #3a2817; --tag-orange: #f1c08e;
+  --tag-red-bg: #3a1d12; --tag-red: #f58a63; --tag-yellow-bg: #352c10; --tag-yellow: #f3c845; --tag-orange-bg: #3a2817; --tag-orange: #f1c08e;
   --tag-purple-bg: #2b2242; --tag-purple: #cdb9f2; --tag-brown-bg: #33261e; --tag-brown: #e0c2ae;
   color-scheme: dark;
 }
@@ -104,7 +105,7 @@ body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 var(
 a { color: var(--brand); }
 button { font: inherit; color: inherit; cursor: pointer; }
 input, select, textarea { font: inherit; color: var(--text); }
-.num { font-variant-numeric: tabular-nums; }
+.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: .94em; }
 .muted { color: var(--text-2); }
 .faint { color: var(--text-3); }
 .small { font-size: 13px; }
@@ -625,3 +626,24 @@ table.db tr.locked .title-cell svg { color: var(--red); }
 .fl { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .fl > span { display: none; font-size: 11px; font-weight: 700; color: var(--text-3); text-transform: uppercase; letter-spacing: .04em; padding-left: 2px; }
 @media (max-width: 620px) { .fl > span { display: block; } }
+
+/* ---------- semáforo do CMV (manual de marca) ---------- */
+.bar-row .bt i.cmv-ok { background: var(--brand); }
+.bar-row .bt i.cmv-atencao { background: var(--manteiga); }
+.bar-row .bt i.cmv-alto { background: var(--accent); }
+.cmv-txt-ok { color: var(--good); }
+.cmv-txt-atencao { color: var(--yellow-ink); }
+.cmv-txt-alto { color: var(--red); }
+.totals .tag { display: flex; width: max-content; margin-top: 4px; }
+.ic-red { color: var(--red); }
+.ic-yellow { color: var(--yellow-ink); }
+.ic-green { color: var(--good); }
+.gcard .cover.photo.attn::after { background: linear-gradient(0deg, rgba(92, 70, 4, .86) 0%, rgba(92, 70, 4, .1) 70%); }
+.cmv-dica { margin: 12px 0 0; padding-top: 10px; border-top: 1px solid color-mix(in srgb, var(--text) 10%, transparent); font-size: 14px; }
+.cmv-dica b { font-family: var(--font-mono); color: var(--brand); }
+
+/* ---------- painel admin ---------- */
+.admin-me { display: flex; align-items: center; gap: 10px; padding: 4px 4px 6px; min-width: 0; }
+.admin-me .who { min-width: 0; overflow: hidden; display: flex; flex-direction: column; line-height: 1.25; font-weight: 600; font-size: 13px; }
+.admin-me .who small { color: var(--text-3); font-weight: 500; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ws .who small { overflow: hidden; text-overflow: ellipsis; }

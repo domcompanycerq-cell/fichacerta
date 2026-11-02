@@ -1,6 +1,6 @@
 (function () {
   "use strict";
-  const { $, $$, esc, brl, fmt, dataBR, dataHoraBR, telBR, relativo, api, toast, armar, overlay, icon } = window.UI;
+  const { $, $$, esc, brl, fmt, dataBR, dataHoraBR, telBR, relativo, api, toast, armar, overlay, icon, logo, wordmark } = window.UI;
   const app = $("#app");
   const S = { filtro: "todos", q: "", usuarios: [], sel: new Set(), resumo: null };
 
@@ -18,26 +18,40 @@
   async function boot() {
     try {
       const r = await api("GET", "/api/me");
-      if (r.user.role !== "admin") { app.innerHTML = `<div class="auth"><div class="auth-box"><h1>Acesso restrito</h1><p class="sub">Esta área é só para administradores.</p><a class="btn" href="/">Voltar ao app</a></div></div>`; return; }
+      if (r.user.role !== "admin") return portao("Acesso restrito", "Esta área é só para administradores do CMV Certo.", `<a class="btn block" href="/">Voltar ao app</a>`);
       shell(r.user);
     } catch (e) {
-      app.innerHTML = `<div class="auth"><div class="auth-box"><h1>Painel administrativo</h1><p class="sub">Entre com a conta de administrador.</p><a class="btn primary block" href="/">Ir para o login</a></div></div>`;
+      portao("Painel administrativo", "Entre no app com a conta de administrador e volte para esta página.", `<a class="btn primary block" href="/">Ir para o login</a>`);
     }
   }
+
+  // Tela de entrada do painel, no mesmo visual da página de acesso do app.
+  function portao(titulo, texto, acao) {
+    app.innerHTML = `<div class="auth">
+      <aside class="auth-hero">
+        <img class="auth-photo" src="/img/acesso.webp" alt="" fetchpriority="high">
+        <div class="auth-hero-in"><div class="brand">${logo()}${wordmark("CMV Certo")}</div>
+          <div class="auth-pitch"><h2>Painel do CMV Certo.</h2><p>Usuários, planos, liberação do Pro e avisos de renovação num lugar só.</p></div>
+        </div>
+      </aside>
+      <main class="auth-side"><div class="auth-box"><span class="tag orange" style="align-self:flex-start">Admin</span><h1>${esc(titulo)}</h1><p class="sub">${esc(texto)}</p>${acao}</div></main>
+    </div>`;
+  }
+
+  // Itens do menu: rota, ícone, nome e cor da área (mesmas cores do app).
+  const NAV = [["#visao", "chart", "Visão geral", "c-home"], ["#usuarios", "users", "Usuários", "c-ins"], ["#notificar", "send", "Enviar notificação", "c-pla"], ["#log", "history", "Registro de ações", "c-his"]];
+  const ico = (nome, cor) => `<span class="ico ${cor}">${icon(nome)}</span>`;
 
   function shell(me) {
     app.innerHTML = `<div class="shell">
       <aside class="sidebar" id="side">
-        <div class="ws"><span class="avatar" style="background:var(--tag-blue-bg);color:var(--tag-blue)">${icon("shield").replace("<svg", '<svg style="width:14px;height:14px"')}</span><span class="who">Painel admin</span></div>
+        <div class="ws"><span class="brand-mark">${logo()}</span><span class="who">${wordmark("CMV Certo")}<small>Painel admin</small></span><span class="tag orange" style="margin-left:auto">Admin</span></div>
         <div class="nav-label">Gestão</div>
-        <button class="nav-item" data-href="#visao">${icon("chart")}Visão geral</button>
-        <button class="nav-item" data-href="#usuarios">${icon("users")}Usuários</button>
-        <button class="nav-item" data-href="#notificar">${icon("send")}Enviar notificação</button>
-        <button class="nav-item" data-href="#log">${icon("history")}Registro de ações</button>
+        ${NAV.map(([href, ic, nome, cor]) => `<button class="nav-item" data-href="${href}">${ico(ic, cor)}${nome}</button>`).join("")}
         <div class="side-foot">
-          <span class="small faint">${esc(me.email)}</span>
-          <a class="nav-item" href="/" style="text-decoration:none;padding-left:0">${icon("chef")}Abrir o app</a>
-          <button class="nav-item" id="sair" style="padding-left:0">${icon("logout")}Sair</button>
+          <div class="admin-me"><span class="avatar">${esc((me.nome || me.email || "?")[0].toUpperCase())}</span><span class="who">${esc(me.nome || "Administrador")}<small>${esc(me.email)}</small></span></div>
+          <a class="nav-item" href="/">${ico("home", "c-fic")}Abrir o app</a>
+          <button class="nav-item" id="sair">${ico("logout", "c-usr")}Sair</button>
         </div>
       </aside>
       <div id="sideScrim" class="scrim-side" hidden></div>
@@ -62,11 +76,12 @@
     ({ "#visao": viewVisao, "#usuarios": viewUsuarios, "#notificar": () => viewNotificar(), "#log": viewLog }[h] || viewVisao)();
   }
   const crumb = (t) => { $("#crumb").textContent = t; };
-  const head = (ic, t, d) => `<div class="page-icon">${icon(ic)}</div><h1 class="page-title">${esc(t)}</h1>${d ? `<p class="page-desc">${d}</p>` : ""}`;
+  const COR = { chart: "c-home", users: "c-ins", send: "c-pla", history: "c-his" };
+  const head = (ic, t, d) => `<div class="page-head"><div class="page-icon ${COR[ic] || ""}">${icon(ic)}</div><h1 class="page-title">${esc(t)}</h1></div>${d ? `<p class="page-desc">${d}</p>` : '<div style="height:14px"></div>'}`;
   const falha = (e) => { if (e.status === 401 || e.status === 403) return boot(); toast(esc(e.message)); };
 
   function planoTag(u) {
-    if (u.plano === "pro") return `<span class="tag blue">Pro</span>`;
+    if (u.plano === "pro") return `<span class="tag green">Pro</span>`;
     if (u.vencido) return `<span class="tag red">Pro vencido</span>`;
     return `<span class="tag">Free</span>`;
   }
@@ -130,7 +145,7 @@
     for (let v = 0; v <= top; v += step) grid += `<line x1="${pad.l}" x2="${W - pad.r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${pad.l - 6}" y="${y(v) + 4}" text-anchor="end" font-size="10" fill="var(--text-3)">${v}</text>`;
     const bars = dados.map((d, i) => {
       const x = pad.l + i * bw + bw * 0.18, h = y(0) - y(d.n);
-      return `<rect x="${x}" y="${y(d.n)}" width="${bw * 0.64}" height="${Math.max(0, h)}" rx="2" fill="var(--blue)" opacity="${d.n ? 0.85 : 0}"><title>${d.dia.split("-").reverse().join("/")}: ${d.n}</title></rect>`;
+      return `<rect x="${x}" y="${y(d.n)}" width="${bw * 0.64}" height="${Math.max(0, h)}" rx="2" fill="var(--brand)" opacity="${d.n ? 0.9 : 0}"><title>${d.dia.split("-").reverse().join("/")}: ${d.n}</title></rect>`;
     }).join("");
     const lbls = dados.map((d, i) => (i % 5 === 0 || i === dados.length - 1) ? `<text x="${pad.l + i * bw + bw / 2}" y="${H - 6}" text-anchor="middle" font-size="10" fill="var(--text-3)">${d.dia.slice(8)}/${d.dia.slice(5, 7)}</text>` : "").join("");
     return `<div class="table-wrap"><svg class="chart" viewBox="0 0 ${W} ${H}" style="min-width:480px" role="img" aria-label="Cadastros por dia">${grid}${bars}${lbls}</svg></div>`;
@@ -312,7 +327,7 @@
     const lib = $("#liberar", p.root); if (lib) lib.onclick = () => acao(`/api/admin/usuarios/${id}/liberar`, {}, "Acesso liberado.");
     const blq = $("#bloquear", p.root); if (blq) armar(blq, "Confirmar bloqueio", () => acao(`/api/admin/usuarios/${id}/bloquear`, { motivo: $("#motivo").value }, "Usuário bloqueado. Sessões encerradas."));
     armar($("#tmp", p.root), "Confirmar: trocar a senha", async () => {
-      try { const r = await api("POST", `/api/admin/usuarios/${id}/senha-temporaria`); $("#tmpOut").innerHTML = `Nova senha: <b class="num" style="user-select:all">${esc(r.senha)}</b> — envie ao usuário e peça para trocar em Meus dados.`; }
+      try { const r = await api("POST", `/api/admin/usuarios/${id}/senha-temporaria`); $("#tmpOut").innerHTML = `Nova senha: <b class="num" style="user-select:all">${esc(r.senha)}</b>. Envie ao usuário e peça para trocar em Meus dados.`; }
       catch (e) { pe.textContent = e.message; }
     });
     $("#msgRenov", p.root).onclick = async () => {

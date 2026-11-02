@@ -74,10 +74,19 @@
   }
 
   /* ================= marca ================= */
+  // Semáforo do CMV (manual de marca): até o alvo = Saudável (Salsa); até 5 pontos acima = Atenção (Manteiga);
+  // mais que isso = Alto (Páprica). Sem preço de venda não há CMV praticado.
+  function faixaCmv(c, alvoPct) {
+    if (!(c.venda > 0) || !isFinite(c.cmvReal)) return null;
+    const alvo = (alvoPct || 30) / 100;
+    if (c.cmvReal <= alvo + 1e-9) return { k: "ok", nome: "Saudável", tag: "green" };
+    if (c.cmvReal <= alvo + 0.05 + 1e-9) return { k: "atencao", nome: "Atenção", tag: "yellow" };
+    return { k: "alto", nome: "Alto", tag: "red" };
+  }
   // Símbolo do CMV Certo: borda de prato aberta (o C de custo) com o check saindo dela.
-  const logo = () => `<svg class="logo-svg" viewBox="0 0 512 512" aria-hidden="true"><path class="lc" d="M331 126.1A150 150 0 1 0 397 307.3"/><path class="lk" d="M180 250 240 308 420 128"/></svg>`;
+  const { logo, wordmark } = window.UI;
   // Nome no formato da marca: primeira palavra forte, o resto leve e em minúsculas ("CMV certo").
-  const wordmark = (nome) => { const [a, ...b] = String(nome).split(" "); return `<span class="wordmark"><b>${esc(a)}</b>${b.length ? " " + esc(b.join(" ").toLowerCase()) : ""}</span>`; };
+  // logo() e wordmark() vêm de ui.js (compartilhados com o painel admin).
 
   // Fotos das fichas: escolhidas pela categoria ou pelo nome da receita.
   const FOTOS = [
@@ -380,7 +389,7 @@
     const ativas = S.receitas.filter((r) => !r.bloqueado);
     const calc = ativas.map((r) => ({ r, c: C.calcRecipe(r, S.insMap) }));
     const comVenda = calc.filter((x) => x.c.venda > 0);
-    const acima = comVenda.filter((x) => x.c.cmvReal > (x.r.cmvAlvo || 30) / 100);
+    const acima = comVenda.filter((x) => faixaCmv(x.c, x.r.cmvAlvo).k !== "ok");
     const pend = calc.filter((x) => x.c.errs);
     const custoMedio = calc.length ? calc.reduce((t, x) => t + x.c.porcao, 0) / calc.length : 0;
     const cmvMedio = comVenda.length ? comVenda.reduce((t, x) => t + x.c.cmvReal, 0) / comVenda.length : NaN;
@@ -394,7 +403,7 @@
     const maxF = topFichas.length ? topFichas[0].c.porcao : 1;
     const recentes = [...S.insumos].sort((a, b) => String(b.atualizadoEm).localeCompare(String(a.atualizadoEm))).slice(0, 5);
     const atencao = [...pend.map((x) => ({ ...x, motivo: `${x.c.errs} pendência${x.c.errs > 1 ? "s" : ""}`, cls: "red" })),
-      ...acima.filter((x) => !x.c.errs).map((x) => ({ ...x, motivo: `CMV ${pct(x.c.cmvReal)} · alvo ${fmt(x.r.cmvAlvo, 0)}%`, cls: "red" }))].slice(0, 5);
+      ...acima.filter((x) => !x.c.errs).sort((a, b) => b.c.cmvReal - a.c.cmvReal).map((x) => ({ ...x, motivo: `CMV ${pct(x.c.cmvReal)} · alvo ${fmt(x.r.cmvAlvo, 0)}%`, cls: faixaCmv(x.c, x.r.cmvAlvo).tag }))].slice(0, 5);
 
     const hora = new Date().getHours();
     const saud = hora < 12 ? "Bom dia" : hora < 18 ? "Boa tarde" : "Boa noite";
@@ -425,12 +434,12 @@
       <div class="dash-grid">
         <div class="panel"><h3>Custo por porção<button data-go="#fichas">Ver fichas</button></h3>
           ${topFichas.length ? `<div class="bars">${topFichas.map(({ r, c }) => {
-            const over = c.venda > 0 && c.cmvReal > (r.cmvAlvo || 30) / 100;
-            return `<button class="bar-row" data-ficha="${r.id}"><span class="bn">${esc(r.nome)}</span><span class="bv">${brl(c.porcao)}</span><span class="bt"><i class="${over ? "warn" : ""}" style="width:${Math.max(4, (c.porcao / maxF) * 100)}%"></i></span></button>`;
+            const fx = faixaCmv(c, r.cmvAlvo);
+            return `<button class="bar-row" data-ficha="${r.id}"><span class="bn">${esc(r.nome)}</span><span class="bv">${brl(c.porcao)}</span><span class="bt"><i class="${fx ? "cmv-" + fx.k : ""}" style="width:${Math.max(4, (c.porcao / maxF) * 100)}%"></i></span></button>`;
           }).join("")}</div>` : `<div class="empty">Crie uma ficha técnica para ver o custo por porção aqui.</div>`}
         </div>
         <div class="panel"><h3>Precisam de atenção</h3>
-          ${atencao.length ? `<div class="mini-list">${atencao.map((x) => `<button class="mini-item" data-ficha="${x.r.id}">${icon("alert").replace("<svg", '<svg style="width:16px;height:16px;color:var(--red);flex:none"')}<span class="mi-name">${esc(x.r.nome)}</span><span class="tag ${x.cls}">${esc(x.motivo)}</span></button>`).join("")}</div>`
+          ${atencao.length ? `<div class="mini-list">${atencao.map((x) => `<button class="mini-item" data-ficha="${x.r.id}">${icon("alert").replace("<svg", `<svg class="ic-${x.cls}" style="width:16px;height:16px;flex:none"`)}<span class="mi-name">${esc(x.r.nome)}</span><span class="tag ${x.cls}">${esc(x.motivo)}</span></button>`).join("")}</div>`
             : `<div class="empty" style="padding:20px 8px">${icon("check").replace("<svg", '<svg style="width:22px;height:22px;color:var(--good);display:block;margin:0 auto 6px"')}Tudo certo: nenhuma ficha acima do CMV alvo ou com pendência.</div>`}
         </div>
         <div class="panel"><h3>Insumos que mais pesam nas fichas<button data-go="#insumos">Ver insumos</button></h3>
@@ -645,7 +654,7 @@
         await atualizarMe(); viewInsumos();
         if (r.rejeitadas.length) {
           $("#il").value = r.rejeitadas.join("\n");
-          const e = $("#ie"); e.textContent = `${r.criados} cadastrado(s), ${r.atualizados} atualizado(s). ${r.rejeitadas.length} linha(s) não entraram${r.limite ? ` — ${r.mensagemLimite}` : " (confira o formato)"}.`;
+          const e = $("#ie"); e.textContent = `${r.criados} cadastrado(s), ${r.atualizados} atualizado(s). ${r.rejeitadas.length} linha(s) não entraram${r.limite ? `. ${r.mensagemLimite}` : " (confira o formato)"}.`;
         } else { m.close(); toast(`${r.criados} insumo(s) cadastrado(s), ${r.atualizados} atualizado(s).`); }
       } catch (ex) { tratarErro(ex, $("#ie")); }
     };
@@ -673,11 +682,11 @@
               <div class="prop"><span>Guardada, volta ao renovar o Pro</span></div>
             </div></button>`;
           const c = C.calcRecipe(r, S.insMap);
-          const over = c.venda > 0 && c.cmvReal > r.cmvAlvo / 100;
+          const fx = faixaCmv(c, r.cmvAlvo);
           return `<button class="gcard" data-id="${r.id}">
-            <div class="cover photo ${over || c.errs ? "warn" : ""}"><img src="${fotoFicha(r)}" alt="" loading="lazy" decoding="async"><span>${brl(c.porcao)}</span><small>por ${esc(singular(r.unidadeRend))}</small></div>
+            <div class="cover photo ${c.errs || (fx && fx.k === "alto") ? "warn" : fx && fx.k === "atencao" ? "attn" : ""}"><img src="${fotoFicha(r)}" alt="" loading="lazy" decoding="async"><span>${brl(c.porcao)}</span><small>por ${esc(singular(r.unidadeRend))}</small></div>
             <div class="body"><div class="t">${esc(r.nome)}</div>
-              <div class="row" style="gap:4px">${r.categoria ? `<span class="tag orange">${esc(r.categoria)}</span>` : ""}${c.errs ? `<span class="tag red">${c.errs} pendência</span>` : ""}${c.venda > 0 ? `<span class="tag ${over ? "red" : "green"}">CMV ${pct(c.cmvReal)}</span>` : ""}</div>
+              <div class="row" style="gap:4px">${r.categoria ? `<span class="tag orange">${esc(r.categoria)}</span>` : ""}${c.errs ? `<span class="tag red">${c.errs} pendência</span>` : ""}${fx ? `<span class="tag ${fx.tag}" title="${fx.nome}">CMV ${pct(c.cmvReal)} · ${fx.nome}</span>` : ""}</div>
               <div class="prop"><span>Custo total</span><b>${brl(c.total)}</b></div>
               <div class="prop"><span>Rende</span><b>${fmt(c.rend)} ${esc(r.unidadeRend)}</b></div>
               <div class="prop"><span>Preço sugerido</span><b>${brl(c.sugerido)}</b></div>
@@ -763,15 +772,15 @@
         const L = c.lines[k];
         $(".cost", row).innerHTML = !L.insumoId ? '<span class="faint">—</span>' : L.err ? `<span class="tag red">${L.err}</span>` : brl(L.cost);
       });
-      const over = c.venda > 0 && c.cmvReal > (f.cmvAlvo || 30) / 100;
+      const fx = faixaCmv(c, f.cmvAlvo);
       $("#sbLbl").textContent = `Custo por ${singular(f.unidadeRend)} · sugerido ${brl(c.sugerido)}`;
       $("#sbVal").textContent = brl(c.porcao);
       $("#tot").innerHTML = `${icon("bulb")}<div class="ct"><div class="totals">
         <div><span>Custo total</span><b>${brl(c.total)}</b></div>
         <div><span>Custo por ${esc(singular(f.unidadeRend))}</span><b>${brl(c.porcao)}</b></div>
         <div class="hl"><span>Preço sugerido (CMV ${fmt(f.cmvAlvo || 30, 1)}%)</span><b>${brl(c.sugerido)}</b></div>
-        <div><span>CMV praticado</span><b class="${over ? "up" : ""}">${c.venda > 0 ? pct(c.cmvReal) : "—"}</b></div>
-      </div></div>`;
+        <div><span>CMV praticado</span><b class="${fx ? "cmv-txt-" + fx.k : ""}">${fx ? pct(c.cmvReal) : "—"}</b>${fx ? `<span class="tag ${fx.tag}" style="margin-top:4px">${fx.nome}</span>` : ""}</div>
+      </div>${fx && fx.k !== "ok" ? `<p class="cmv-dica">Esse prato está com CMV de ${pct(c.cmvReal)}. Cobre <b>${brl(c.sugerido)}</b> para voltar a ${fmt(f.cmvAlvo || 30, 1)}%.</p>` : ""}</div>`;
     }
     const sujo = () => { S.dirty = true; $("#saveState").textContent = "Alterações não salvas"; $("#save2").textContent = "Salvar •"; };
     (r.itens.length ? r.itens : [undefined, undefined]).forEach((l) => addLine(l));
