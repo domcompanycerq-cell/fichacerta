@@ -336,3 +336,66 @@ test("liberação do Pro: a prévia não muda nada; só a conclusão libera e re
   assert.equal(p2.body.valor, 25);
   assert.equal((await a("POST", `/api/admin/usuarios/${id}/pro`, { dias: 30, registrarPagamento: true, valor: "abc" })).status, 400);
 });
+
+test("funil: origem do cadastro, marcos de ativação, listas de contato e resumo semanal", async () => {
+  const a = cliente();
+  await a("POST", "/api/auth/login", { email: "admin@teste.com", senha: "admin-senha-123" });
+  // origem vem do link e é limpa no servidor
+  const c = cliente();
+  const cad = await c("POST", "/api/auth/cadastro", { nome: "Rita Funil", telefone: "15998760001", email: "rita@funil.com", senha: "senha-forte-1", origem: "Contador-JOÃO!" });
+  assert.equal(cad.status, 201);
+  const id = cad.body.user.id;
+  let u = (await a("GET", `/api/admin/usuarios/${id}`)).body.usuario;
+  assert.equal(u.origem, "contador-joao");
+  assert.equal(u.fichaCompletaEm, null);
+  assert.equal(u.limiteEm, null);
+  // cadastro feito pelo admin fica com origem "painel"
+  const pa = await a("POST", "/api/admin/usuarios", { nome: "Pelo Painel", telefone: "15998760002", email: "painel@funil.com" });
+  assert.equal(pa.body.usuario.origem, "painel");
+
+  // ficha com 2 insumos não ativa; com 3, ativa
+  const ins = [];
+  for (const n of ["Pão", "Carne", "Queijo"]) ins.push((await c("POST", "/api/insumos", { nome: n, qtd: "1", unidade: "kg", preco: "10" })).body.insumo.id);
+  const f = await c("POST", "/api/receitas", { nome: "Lanche", rendimento: 1, unidadeRend: "porções", cmvAlvo: 30, itens: ins.slice(0, 2).map((i) => ({ insumoId: i, qtd: 100, unidade: "g", fc: 1 })) });
+  assert.equal(f.status, 201);
+  assert.equal((await a("GET", `/api/admin/usuarios/${id}`)).body.usuario.fichaCompletaEm, null);
+  await c("PUT", `/api/receitas/${f.body.receita.id}`, { nome: "Lanche", rendimento: 1, unidadeRend: "porções", cmvAlvo: 30, itens: ins.map((i) => ({ insumoId: i, qtd: 100, unidade: "g", fc: 1 })) });
+  u = (await a("GET", `/api/admin/usuarios/${id}`)).body.usuario;
+  assert.ok(u.fichaCompletaEm, "ficha com 3 insumos marca a ativação");
+  const ativou = u.fichaCompletaEm;
+
+  // chegar ao limite do Free (2 fichas) marca o limite; o marco não muda depois
+  assert.equal((await c("POST", "/api/receitas", { nome: "Outro", rendimento: 1, unidadeRend: "porções", cmvAlvo: 30, itens: ins.map((i) => ({ insumoId: i, qtd: 50, unidade: "g", fc: 1 })) })).status, 201);
+  u = (await a("GET", `/api/admin/usuarios/${id}`)).body.usuario;
+  assert.ok(u.limiteEm, "preencheu a última vaga do Free");
+  assert.equal(u.fichaCompletaEm, ativou, "o marco guarda só a primeira vez");
+  let lista = (await a("GET", "/api/admin/usuarios?filtro=limite")).body.usuarios.map((x) => x.id);
+  assert.ok(lista.includes(id), "aparece em 'bateu o limite e não assinou'");
+
+  // clique em Assinar
+  assert.equal((await cliente()("POST", "/api/eventos/assinar")).status, 401);
+  assert.equal((await c("POST", "/api/eventos/assinar")).status, 200);
+  assert.ok((await a("GET", `/api/admin/usuarios/${id}`)).body.usuario.assinarEm);
+
+  // virou Pro: sai da lista de limite
+  await a("POST", `/api/admin/usuarios/${id}/pro`, { dias: 30, registrarPagamento: true });
+  lista = (await a("GET", "/api/admin/usuarios?filtro=limite")).body.usuarios.map((x) => x.id);
+  assert.ok(!lista.includes(id));
+
+  // sem ficha há 3 dias: só quem se cadastrou há mais de 3 dias e não ativou
+  await run("UPDATE users SET criado_em = $1 WHERE email = $2", new Date(Date.now() - 4 * 864e5).toISOString(), "painel@funil.com");
+  const semFicha = (await a("GET", "/api/admin/usuarios?filtro=sem-ficha")).body.usuarios.map((x) => x.email);
+  assert.ok(semFicha.includes("painel@funil.com"));
+  assert.ok(!semFicha.includes("rita@funil.com"));
+
+  // filtro por origem e resumo
+  const porOrigem = (await a("GET", "/api/admin/usuarios?origem=contador-joao")).body.usuarios;
+  assert.deepEqual(porOrigem.map((x) => x.id), [id]);
+  const r = (await a("GET", "/api/admin/resumo")).body;
+  const o = r.origens.find((x) => x.origem === "contador-joao");
+  assert.deepEqual(o, { origem: "contador-joao", cadastros: 1, ativados: 1, pro: 1 });
+  assert.equal(r.funil.length, 8);
+  const semanaAtual = r.funil[r.funil.length - 1];
+  assert.ok(semanaAtual.cadastros >= 1 && semanaAtual.ativados >= 1 && semanaAtual.assinar >= 1 && semanaAtual.pro >= 1);
+  assert.ok(r.semFicha >= 1);
+});

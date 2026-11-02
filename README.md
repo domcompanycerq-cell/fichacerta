@@ -32,6 +32,7 @@ Os limites valem no servidor. Se o Pro vence (ou o admin volta a conta ao Free),
 
 **Painel admin** (`/admin`)
 - Indicadores: usuários, assinantes, receita mensal, vencendo, vencidos, bloqueados, gráfico de cadastros.
+- Funil: cada cadastro guarda a **origem** do link (`/?origem=instagram`, `dm`, `contador-joao`, `indicacao-12`; sem origem fica "direto") e três marcos, gravados na primeira vez: 1ª ficha com 3 ou mais insumos, chegada ao limite do Free e clique em Assinar/Renovar. A Visão geral mostra o funil por semana de cadastro, os cadastros por origem e duas listas com WhatsApp e mensagem pronta: "cadastrou e não montou ficha" (3 dias ou mais) e "bateu o limite e não assinou". Em Usuários dá para filtrar por origem e por essas listas. Quem abre o app por um link com `?origem=` cai direto na tela de cadastro.
 - Novo usuário: cadastro feito pelo admin (nome, telefone, e-mail e senha; sem senha, o painel gera uma e mostra uma única vez, com a mensagem de acesso pronta para copiar).
 - Por usuário: liberar Pro em duas etapas (escolhe +30/+60/+90 dias, +6 meses, +1 ano ou uma data; confere o resumo com o novo vencimento e o valor, que pode ser ajustado; e só então clica em **Concluir liberação**), voltar ao Free, bloquear com motivo e liberar, senha temporária, lembrete de renovação, link de WhatsApp.
 - Notificações em massa (app, e-mail e links de WhatsApp prontos).

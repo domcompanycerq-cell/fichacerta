@@ -120,13 +120,15 @@ function validarCadastro(body) {
   if (!(telefone.length === 10 || telefone.length === 11)) return { erro: "Informe o telefone com DDD, por exemplo (15) 99999-9999." };
   if (!EMAIL_RE.test(email)) return { erro: "Informe um e-mail válido." };
   if (senha.length < 8) return { erro: "A senha precisa ter pelo menos 8 caracteres." };
-  return { nome, email, telefone, senha };
+  return { nome, email, telefone, senha, origem: limparOrigem(body.origem) };
 }
-async function criarConta({ nome, email, telefone, senha }, ultimoAcesso = now()) {
+// Origem do cadastro vinda do link (?origem=instagram, contador-joao, indicacao-12): só letras, números, - e _.
+const limparOrigem = (v) => String(v || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9_-]/g, "").slice(0, 60) || null;
+async function criarConta({ nome, email, telefone, senha, origem }, ultimoAcesso = now()) {
   const hash = await auth.hashSenha(senha);
   const novo = await get(
-    "INSERT INTO users (nome, email, telefone, senha_hash, criado_em, ultimo_acesso) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (email) DO NOTHING RETURNING *",
-    nome, email, telefone, hash, now(), ultimoAcesso);
+    "INSERT INTO users (nome, email, telefone, senha_hash, criado_em, ultimo_acesso, origem) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (email) DO NOTHING RETURNING *",
+    nome, email, telefone, hash, now(), ultimoAcesso, origem);
   if (!novo) return null;
   await run("INSERT INTO notificacoes (user_id, titulo, mensagem, tipo, criado_em) VALUES ($1,$2,$3,$4,$5)", novo.id,
     `Boas-vindas ao ${notif.APP_NAME}`,
@@ -221,11 +223,26 @@ app.put("/api/me/senha", auth.exigirLogin, h(async (req, res) => {
   res.json({ ok: true });
 }));
 
+/* ---------------- marcos do funil ---------------- */
+// Grava só a primeira vez de cada marco (colunas fixas, nunca vindas da requisição).
+const MARCOS = ["ficha_completa_em", "limite_em", "assinar_em"];
+async function marcar(userId, coluna) {
+  if (!MARCOS.includes(coluna)) throw new Error(`Marco desconhecido: ${coluna}`);
+  await run(`UPDATE users SET ${coluna} = $1 WHERE id = $2 AND ${coluna} IS NULL`, now(), userId);
+}
+// Clique em "Assinar"/"Renovar pelo WhatsApp" (o pagamento acontece fora do app).
+app.post("/api/eventos/assinar", auth.exigirLogin, h(async (req, res) => {
+  await marcar(req.user.id, "assinar_em");
+  res.json({ ok: true });
+}));
+
 /* ---------------- insumos ---------------- */
+// Também marca quando a conta Free chega ao limite (ao preencher a última vaga ou ao tentar passar dela).
 async function checarLimite(user, tipo, adicionando = 1) {
   const lim = planos.limites(user)[tipo];
   if (!isFinite(lim)) return null;
   const atual = (await planos.uso(user.id))[tipo];
+  if (atual + adicionando >= lim) await marcar(user.id, "limite_em");
   return atual + adicionando > lim ? { lim, atual } : null;
 }
 const msgLimite = (tipo, lim) => tipo === "insumos"
@@ -389,6 +406,7 @@ app.post("/api/receitas", auth.exigirLogin, h(async (req, res) => {
   const r = await get(`INSERT INTO receitas (user_id, nome, categoria, rendimento, unidade_rend, cmv_alvo, preco_venda, preparo, itens_json, criado_em, atualizado_em)
     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
     req.user.id, v.nome, v.categoria, v.rendimento, v.unidadeRend, v.cmvAlvo, v.precoVenda, v.preparo, JSON.stringify(v.itens), now(), now());
+  if (v.itens.length >= 3) await marcar(req.user.id, "ficha_completa_em");
   res.status(201).json({ receita: receitaOut(r) });
 }));
 app.put("/api/receitas/:id", auth.exigirLogin, h(async (req, res) => {
@@ -401,6 +419,7 @@ app.put("/api/receitas/:id", auth.exigirLogin, h(async (req, res) => {
   const r = await get(`UPDATE receitas SET nome=$1, categoria=$2, rendimento=$3, unidade_rend=$4, cmv_alvo=$5, preco_venda=$6, preparo=$7, itens_json=$8, atualizado_em=$9
     WHERE id=$10 AND user_id=$11 RETURNING *`,
     v.nome, v.categoria, v.rendimento, v.unidadeRend, v.cmvAlvo, v.precoVenda, v.preparo, JSON.stringify(v.itens), now(), id, req.user.id);
+  if (v.itens.length >= 3) await marcar(req.user.id, "ficha_completa_em");
   res.json({ receita: receitaOut(r) });
 }));
 app.delete("/api/receitas/:id", auth.exigirLogin, h(async (req, res) => {
@@ -450,6 +469,8 @@ const logAdmin = (req, userId, acao, detalhe = "") =>
   run("INSERT INTO admin_log (admin_id, user_id, acao, detalhe, criado_em) VALUES ($1,$2,$3,$4,$5)", req.user.id, userId, acao, detalhe, now());
 
 const SQL_USUARIOS = `SELECT u.id, u.nome, u.email, u.telefone, u.role, u.plano, u.pro_ate, u.status, u.motivo_bloqueio, u.criado_em, u.ultimo_acesso, u.oferta_usada,
+  u.origem, u.ficha_completa_em, u.limite_em, u.assinar_em,
+  (SELECT COUNT(*) FROM pagamentos p WHERE p.user_id = u.id AND p.status IN ('aprovado','manual'))::int AS n_pagamentos,
   (SELECT COUNT(*) FROM insumos i WHERE i.user_id = u.id)::int AS n_insumos,
   (SELECT COUNT(*) FROM receitas r WHERE r.user_id = u.id)::int AS n_receitas,
   (SELECT COALESCE(SUM(valor),0) FROM pagamentos p WHERE p.user_id = u.id AND p.status IN ('aprovado','manual'))::float AS total_pago
@@ -461,10 +482,22 @@ function adminUserOut(u) {
     plano: ativoPro ? "pro" : "free", vencido: u.plano === "pro" && !ativoPro, proAte: u.pro_ate, diasRestantes: planos.diasRestantes(u),
     criadoEm: u.criado_em, ultimoAcesso: u.ultimo_acesso, insumos: u.n_insumos, receitas: u.n_receitas, totalPago: u.total_pago,
     ofertaDisponivel: planos.ofertaDisponivel(u),
+    origem: u.origem || null, fichaCompletaEm: u.ficha_completa_em || null, limiteEm: u.limite_em || null, assinarEm: u.assinar_em || null,
+    jaFoiPro: !!u.pro_ate, pagamentos: u.n_pagamentos || 0,
   };
 }
-async function filtrarUsuarios(filtro, dias = 7) {
-  const lista = (await all(`${SQL_USUARIOS} WHERE u.role = 'user' ORDER BY u.criado_em DESC`)).map(adminUserOut);
+// Listas de contato do funil.
+const semFichaEm3Dias = (u) => !u.fichaCompletaEm && Date.parse(u.criadoEm) < Date.now() - 3 * 864e5 && u.status !== "bloqueado";
+const limiteSemAssinar = (u) => !!u.limiteEm && u.plano === "free" && !u.jaFoiPro && u.status !== "bloqueado";
+// Semana (segunda-feira, horário de Brasília) de uma data ISO, como AAAA-MM-DD.
+function semanaDe(iso) {
+  const d = new Date(Date.parse(iso) - 3 * 3600e3);
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+  return d.toISOString().slice(0, 10);
+}
+async function filtrarUsuarios(filtro, dias = 7, origem = "") {
+  let lista = (await all(`${SQL_USUARIOS} WHERE u.role = 'user' ORDER BY u.criado_em DESC`)).map(adminUserOut);
+  if (origem) lista = lista.filter((u) => (u.origem || "direto") === origem);
   const d30 = Date.now() - 30 * 864e5;
   switch (filtro) {
     case "pro": return lista.filter((u) => u.plano === "pro");
@@ -473,8 +506,37 @@ async function filtrarUsuarios(filtro, dias = 7) {
     case "vencidos": return lista.filter((u) => u.vencido);
     case "bloqueados": return lista.filter((u) => u.status === "bloqueado");
     case "inativos": return lista.filter((u) => Date.parse(u.ultimoAcesso || 0) < d30);
+    case "sem-ficha": return lista.filter(semFichaEm3Dias);
+    case "limite": return lista.filter(limiteSemAssinar);
     default: return lista;
   }
+}
+
+// Cadastros por origem, com quantos ativaram e quantos viraram Pro.
+function origensDe(us) {
+  const m = {};
+  us.forEach((u) => {
+    const k = u.origem || "direto";
+    const o = m[k] || (m[k] = { origem: k, cadastros: 0, ativados: 0, pro: 0 });
+    o.cadastros++; if (u.fichaCompletaEm) o.ativados++; if (u.jaFoiPro) o.pro++;
+  });
+  return Object.values(m).sort((a, b) => b.cadastros - a.cadastros);
+}
+// Funil por semana de cadastro (últimas 8 semanas): o que cada turma de cadastros já alcançou.
+function funilSemanal(us) {
+  const semanas = [];
+  for (let i = 7; i >= 0; i--) semanas.push(semanaDe(new Date(Date.now() - i * 7 * 864e5).toISOString()));
+  const m = Object.fromEntries(semanas.map((s) => [s, { semana: s, cadastros: 0, ativados: 0, limite: 0, assinar: 0, pro: 0, renovaram: 0 }]));
+  us.forEach((u) => {
+    const l = m[semanaDe(u.criadoEm)]; if (!l) return;
+    l.cadastros++;
+    if (u.fichaCompletaEm) l.ativados++;
+    if (u.limiteEm) l.limite++;
+    if (u.assinarEm) l.assinar++;
+    if (u.jaFoiPro) l.pro++;
+    if (u.pagamentos >= 2) l.renovaram++;
+  });
+  return semanas.map((s) => m[s]);
 }
 
 admin.get("/resumo", h(async (req, res) => {
@@ -497,6 +559,10 @@ admin.get("/resumo", h(async (req, res) => {
     mrr: pro.length * planos.PRECO_PRO,
     receita30,
     cadastrosPorDia: Object.entries(porDia).map(([dia, n]) => ({ dia, n })),
+    origens: origensDe(us),
+    funil: funilSemanal(us),
+    semFicha: us.filter(semFichaEm3Dias).length,
+    limiteSemAssinar: us.filter(limiteSemAssinar).length,
     preco: planos.PRECO_PRO,
     precoOferta: planos.PRECO_OFERTA,
     suporteWhatsApp: notif.SUPORTE_WHATSAPP,
@@ -506,7 +572,7 @@ admin.get("/resumo", h(async (req, res) => {
 
 admin.get("/usuarios", h(async (req, res) => {
   const q = txt(req.query.q, 100).toLowerCase();
-  let lista = await filtrarUsuarios(String(req.query.filtro || "todos"), Number(req.query.dias) || 7);
+  let lista = await filtrarUsuarios(String(req.query.filtro || "todos"), Number(req.query.dias) || 7, limparOrigem(req.query.origem) || "");
   if (q) lista = lista.filter((u) => `${u.nome} ${u.email} ${u.telefone}`.toLowerCase().includes(q));
   res.json({ usuarios: lista });
 }));
@@ -515,7 +581,7 @@ admin.get("/usuarios", h(async (req, res) => {
 admin.post("/usuarios", h(async (req, res) => {
   const gerada = !String(req.body.senha || "").trim();
   const senha = gerada ? crypto.randomBytes(9).toString("base64url") : String(req.body.senha);
-  const dados = validarCadastro({ ...req.body, senha });
+  const dados = validarCadastro({ ...req.body, senha, origem: req.body.origem || "painel" });
   if (dados.erro) return erro(res, 400, dados.erro);
   const novo = await criarConta(dados, null);
   if (!novo) return erro(res, 409, "Este e-mail já tem cadastro.");
@@ -622,7 +688,7 @@ admin.post("/notificar", h(async (req, res) => {
     const ids = new Set(req.body.ids.map(Number));
     alvos = (await filtrarUsuarios("todos")).filter((u) => ids.has(u.id));
   } else {
-    alvos = await filtrarUsuarios(String(req.body.filtro || "todos"), Number(req.body.dias) || 7);
+    alvos = await filtrarUsuarios(String(req.body.filtro || "todos"), Number(req.body.dias) || 7, limparOrigem(req.body.origem) || "");
   }
   let emails = 0;
   const whatsapp = [];

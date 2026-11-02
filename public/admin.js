@@ -2,12 +2,22 @@
   "use strict";
   const { $, $$, esc, brl, fmt, dataBR, dataHoraBR, telBR, relativo, api, toast, armar, overlay, icon, logo, wordmark } = window.UI;
   const app = $("#app");
-  const S = { filtro: "todos", q: "", usuarios: [], sel: new Set(), resumo: null };
+  const S = { filtro: "todos", origem: "", q: "", usuarios: [], sel: new Set(), resumo: null };
 
   const FILTROS = [
     ["todos", "Todos"], ["pro", "Pro"], ["free", "Free"], ["vencendo", "Vencendo (7 dias)"],
     ["vencidos", "Vencidos"], ["bloqueados", "Bloqueados"], ["inativos", "Sem acesso há 30 dias"],
+    ["sem-ficha", "Sem ficha há 3 dias"], ["limite", "Bateu o limite, sem assinar"],
   ];
+  // Mensagens prontas para as listas de contato do funil.
+  const primeiroNome = (u) => (u.nome || "").split(" ")[0];
+  const MSG_FUNIL = {
+    "sem-ficha": (u) => `Olá, ${primeiroNome(u)}! Vi que você criou sua conta no CMV Certo. Quer ajuda para montar sua primeira ficha técnica? Em 5 minutos você vê quanto custa o seu prato.`,
+    limite: (u) => `Olá, ${primeiroNome(u)}! Vi que você já usou todo o plano Free do CMV Certo. No Pro você cadastra insumos e fichas sem limite${u.ofertaDisponivel ? `, e o primeiro mês sai por ${brl(S.resumo ? S.resumo.precoOferta : 10)}` : ""}. Quer que eu libere para você?`,
+  };
+  const origemTag = (u) => `<span class="tag ${u.origem ? "purple" : ""}">${esc(u.origem || "direto")}</span>`;
+  const diasDesde = (iso) => Math.floor((Date.now() - Date.parse(iso)) / 864e5);
+  const semFichaEm3 = (u) => !u.fichaCompletaEm && diasDesde(u.criadoEm) >= 3;
   const MODELOS = {
     renovacao: { titulo: "Renove seu plano Pro", mensagem: "Seu plano Pro está perto do vencimento. Fale com o suporte no WhatsApp para renovar e manter insumos e fichas ilimitados e o histórico de preços." },
     vencido: { titulo: "Seu plano Pro venceu", mensagem: "Seu plano Pro venceu e a conta voltou ao Free. Seus dados continuam salvos. Fale com o suporte no WhatsApp para renovar e voltar ao acesso completo." },
@@ -108,7 +118,8 @@
     crumb("Visão geral");
     $("#view").innerHTML = `<div class="page wide">${head("chart", "Visão geral", "")}<div id="vg"><div class="empty">Carregando…</div></div></div>`;
     try {
-      const [r, v] = await Promise.all([api("GET", "/api/admin/resumo"), api("GET", "/api/admin/usuarios?filtro=vencendo&dias=7")]);
+      const [r, v, lSem, lLim] = await Promise.all([api("GET", "/api/admin/resumo"), api("GET", "/api/admin/usuarios?filtro=vencendo&dias=7"),
+        api("GET", "/api/admin/usuarios?filtro=sem-ficha"), api("GET", "/api/admin/usuarios?filtro=limite")]);
       S.resumo = r;
       const conv = r.total ? (r.pro / r.total) * 100 : 0;
       $("#vg").innerHTML = `
@@ -123,17 +134,57 @@
           <div class="stat"><span>Pro vencidos</span><b>${r.vencidos}</b><small>voltaram ao Free</small></div>
           <div class="stat"><span>Bloqueados</span><b>${r.bloqueados}</b><small>sem acesso</small></div>
         </div>
-        <div class="h2" style="margin-top:8px">Cadastros nos últimos 30 dias</div>
+        <div class="h2" style="margin-top:8px">Funil por semana de cadastro</div>
+        <p class="muted small" style="margin:0 0 8px">Cada linha é a turma que se cadastrou naquela semana e até onde ela já chegou. Ativou = salvou uma ficha com 3 ou mais insumos.</p>
+        ${tabelaFunil(r.funil)}
+        <div class="funil-grid">
+          ${listaContato("sem-ficha", "Cadastrou e não montou ficha", "Há 3 dias ou mais sem uma ficha com 3 insumos.", lSem.usuarios, (u) => `cadastro há ${diasDesde(u.criadoEm)} dias`)}
+          ${listaContato("limite", "Bateu o limite e não assinou", "Chegou ao limite do Free e nunca foi Pro.", lLim.usuarios, (u) => `limite em ${dataBR(u.limiteEm)}${u.assinarEm ? " · clicou em Assinar" : ""}`)}
+        </div>
+        <div class="h2">Cadastros por origem</div>
+        <p class="muted small" style="margin:0 0 8px">Vem do <b>?origem=</b> do link de divulgação (ex.: <span class="num">${esc(location.origin)}/?origem=instagram</span>). Sem origem aparece como “direto”.</p>
+        ${tabelaOrigens(r.origens)}
+        <div class="h2" style="margin-top:28px">Cadastros nos últimos 30 dias</div>
         ${grafico(r.cadastrosPorDia)}
         <div class="row" style="justify-content:space-between;margin-top:28px"><div class="h2" style="margin:0">Vencendo nos próximos 7 dias</div>
           ${v.usuarios.length ? `<button class="btn" id="notVenc">${icon("send")}Notificar todos (${v.usuarios.length})</button>` : ""}</div>
         ${v.usuarios.length ? tabelaUsuarios(v.usuarios, false) : `<div class="empty">Nenhuma assinatura vence nos próximos 7 dias.</div>`}`;
+      $$("[data-verlista]", $("#vg")).forEach((b) => b.addEventListener("click", () => { S.filtro = b.dataset.verlista; S.origem = ""; location.hash = "#usuarios"; }));
+      $$("[data-origem]", $("#vg")).forEach((b) => b.addEventListener("click", () => { S.filtro = "todos"; S.origem = b.dataset.origem; location.hash = "#usuarios"; }));
+      $$("[data-uid-mini]", $("#vg")).forEach((b) => b.addEventListener("click", () => peekUsuario(Number(b.dataset.uidMini))));
       if (v.usuarios.length) {
         $("#notVenc").onclick = () => { location.hash = "#notificar"; setTimeout(() => preencherNotificar({ filtro: "vencendo", modelo: "renovacao" }), 0); };
         ligarLinhas($("#vg"));
       }
     } catch (e) { falha(e); }
   }
+  const pctDe = (n, t) => (t ? `<span class="faint small"> ${fmt((n / t) * 100, 0)}%</span>` : "");
+  function tabelaFunil(linhas) {
+    const tot = linhas.reduce((a, l) => { Object.keys(l).forEach((k) => { if (k !== "semana") a[k] = (a[k] || 0) + l[k]; }); return a; }, {});
+    const cel = (l, k) => `<td class="r num">${l[k]}${k !== "cadastros" ? pctDe(l[k], l.cadastros) : ""}</td>`;
+    const ks = ["cadastros", "ativados", "limite", "assinar", "pro", "renovaram"];
+    return `<div class="table-wrap"><table class="db"><thead><tr><th>Semana</th><th class="r">Cadastros</th><th class="r">Ativaram</th><th class="r">Bateram o limite</th><th class="r">Clicaram em Assinar</th><th class="r">Viraram Pro</th><th class="r">Renovaram</th></tr></thead><tbody>
+      ${linhas.slice().reverse().map((l) => `<tr><td class="num">${l.semana.split("-").reverse().slice(0, 2).join("/")}</td>${ks.map((k) => cel(l, k)).join("")}</tr>`).join("")}
+      <tr class="tot"><td><b>8 semanas</b></td>${ks.map((k) => `<td class="r num"><b>${tot[k] || 0}</b>${k !== "cadastros" ? pctDe(tot[k] || 0, tot.cadastros) : ""}</td>`).join("")}</tr>
+      </tbody></table></div>`;
+  }
+  function tabelaOrigens(lista) {
+    if (!lista.length) return `<div class="empty">Nenhum cadastro ainda.</div>`;
+    return `<div class="table-wrap"><table class="db" style="min-width:0"><thead><tr><th>Origem</th><th class="r">Cadastros</th><th class="r">Ativaram</th><th class="r">Viraram Pro</th></tr></thead><tbody>
+      ${lista.map((o) => `<tr class="click" data-origem="${esc(o.origem)}"><td><span class="tag ${o.origem === "direto" ? "" : "purple"}">${esc(o.origem)}</span></td><td class="r num">${o.cadastros}</td><td class="r num">${o.ativados}${pctDe(o.ativados, o.cadastros)}</td><td class="r num">${o.pro}${pctDe(o.pro, o.cadastros)}</td></tr>`).join("")}
+      </tbody></table></div>`;
+  }
+  // Lista curta de pessoas para chamar no WhatsApp, com a mensagem pronta.
+  function listaContato(filtro, titulo, desc, us, detalhe) {
+    const max = 8;
+    return `<div class="panel"><h3>${esc(titulo)}<span class="tag ${us.length ? "orange" : ""}">${us.length}</span></h3>
+      <p class="small muted" style="margin:-4px 0 8px">${esc(desc)}</p>
+      ${us.length ? `<div class="mini-list">${us.slice(0, max).map((u) => `<div class="mini-item"><button class="mi-name link-btn" data-uid-mini="${u.id}">${esc(u.nome)}</button>
+        <span class="mi-val">${esc(detalhe(u))}</span><a class="btn" href="${wa(u, MSG_FUNIL[filtro](u))}" target="_blank" rel="noopener">WhatsApp</a></div>`).join("")}</div>
+        ${us.length > max ? `<button class="btn ghost" data-verlista="${filtro}" style="margin-top:8px">Ver todos (${us.length})</button>` : `<button class="btn ghost" data-verlista="${filtro}" style="margin-top:8px">Abrir em Usuários</button>`}`
+      : `<div class="empty" style="padding:16px 8px">Ninguém nesta lista agora.</div>`}</div>`;
+  }
+
   function grafico(dados) {
     const W = 720, H = 140, pad = { l: 28, r: 8, t: 10, b: 22 };
     const max = Math.max(1, ...dados.map((d) => d.n));
@@ -155,12 +206,12 @@
   function tabelaUsuarios(list, comSelecao) {
     return `<div class="table-wrap"><table class="db"><thead><tr>
       ${comSelecao ? `<th style="width:34px"><input type="checkbox" id="selAll" aria-label="Selecionar todos"></th>` : ""}
-      <th>Nome</th><th>Contato</th><th>Plano</th><th>Vence em</th><th>Status</th><th class="r">Insumos</th><th class="r">Fichas</th><th>Último acesso</th></tr></thead><tbody>
+      <th>Nome</th><th>Contato</th><th>Origem</th><th>Plano</th><th>Vence em</th><th>Status</th><th class="r">Insumos</th><th class="r">Fichas</th><th>Último acesso</th></tr></thead><tbody>
       ${list.map((u) => `<tr class="click" data-uid="${u.id}">
         ${comSelecao ? `<td><input type="checkbox" class="sel" data-id="${u.id}" ${S.sel.has(u.id) ? "checked" : ""} aria-label="Selecionar ${esc(u.nome)}"></td>` : ""}
         <td><span class="title-cell">${icon("user")}${esc(u.nome)}</span></td>
-        <td class="small"><div>${esc(u.email)}</div><a href="${wa(u)}" target="_blank" rel="noopener" class="muted">${esc(telBR(u.telefone))}</a></td>
-        <td>${planoTag(u)}</td><td class="small num">${venceTxt(u)}</td><td>${statusTag(u)}</td>
+        <td class="small"><div>${esc(u.email)}</div><a href="${wa(u, comSelecao && MSG_FUNIL[S.filtro] ? MSG_FUNIL[S.filtro](u) : "")}" target="_blank" rel="noopener" class="muted">${esc(telBR(u.telefone))}</a></td>
+        <td>${origemTag(u)}</td><td>${planoTag(u)}</td><td class="small num">${venceTxt(u)}</td><td>${statusTag(u)}</td>
         <td class="r num">${u.insumos}</td><td class="r num">${u.receitas}</td>
         <td class="small muted">${relativo(u.ultimoAcesso)}</td></tr>`).join("")}
       </tbody></table></div>`;
@@ -175,18 +226,26 @@
     $("#novoU").onclick = novoUsuario;
     $("#view").innerHTML = `<div class="page wide">${head("users", "Usuários", "Clique em um usuário para liberar o Pro, bloquear o acesso ou enviar uma mensagem. Para cadastrar alguém, use <b>Novo usuário</b>.")}
       <div class="db-toolbar"><div class="tabs" id="tabs">${FILTROS.map(([k, t]) => `<button data-f="${k}" aria-pressed="${S.filtro === k}">${t}</button>`).join("")}</div>
-        <span class="spacer"></span><input class="search" id="q" type="search" placeholder="Nome, e-mail ou telefone" value="${esc(S.q)}" aria-label="Buscar usuário"></div>
+        <span class="spacer"></span><select class="input" id="fOrigem" style="width:auto" aria-label="Filtrar por origem"><option value="">Todas as origens</option></select>
+        <input class="search" id="q" type="search" placeholder="Nome, e-mail ou telefone" value="${esc(S.q)}" aria-label="Buscar usuário"></div>
       <div id="bulk" class="row" style="padding:8px 0" hidden><span class="small" id="bulkN"></span><button class="btn" id="bulkNotify">${icon("send")}Notificar selecionados</button><button class="btn ghost" id="bulkClear">Limpar seleção</button></div>
       <div id="ul"><div class="empty">Carregando…</div></div></div>`;
     $$("#tabs button").forEach((b) => b.addEventListener("click", () => { S.filtro = b.dataset.f; $$("#tabs button").forEach((x) => x.setAttribute("aria-pressed", x === b)); carregar(); }));
     let t; $("#q").addEventListener("input", (e) => { S.q = e.target.value; clearTimeout(t); t = setTimeout(carregar, 250); });
     $("#bulkNotify").onclick = () => { location.hash = "#notificar"; setTimeout(() => preencherNotificar({ ids: [...S.sel] }), 0); };
     $("#bulkClear").onclick = () => { S.sel.clear(); carregar(); };
+    const fo = $("#fOrigem");
+    fo.addEventListener("change", () => { S.origem = fo.value; carregar(); });
+    (S.resumo ? Promise.resolve(S.resumo) : api("GET", "/api/admin/resumo").then((r) => (S.resumo = r))).then((r) => {
+      const ops = r.origens.map((o) => o.origem);
+      if (S.origem && !ops.includes(S.origem)) ops.push(S.origem);
+      fo.innerHTML = `<option value="">Todas as origens</option>${ops.map((o) => `<option value="${esc(o)}" ${o === S.origem ? "selected" : ""}>${esc(o)}</option>`).join("")}`;
+    }).catch(() => {});
     carregar();
   }
   async function carregar() {
     try {
-      const r = await api("GET", `/api/admin/usuarios?filtro=${S.filtro}&q=${encodeURIComponent(S.q)}`);
+      const r = await api("GET", `/api/admin/usuarios?filtro=${S.filtro}&origem=${encodeURIComponent(S.origem)}&q=${encodeURIComponent(S.q)}`);
       S.usuarios = r.usuarios;
       const ul = $("#ul"); if (!ul) return;
       ul.innerHTML = r.usuarios.length ? tabelaUsuarios(r.usuarios, true) : `<div class="empty">Nenhum usuário neste filtro.</div>`;
@@ -208,6 +267,7 @@
         <div class="field"><label for="nuNome">Nome</label><input class="input" id="nuNome" autocomplete="off" required></div>
         <div class="field"><label for="nuTel">DDD + telefone</label><input class="input" id="nuTel" type="tel" inputmode="tel" placeholder="(15) 99999-9999" required></div>
         <div class="field"><label for="nuEmail">E-mail</label><input class="input" id="nuEmail" type="email" autocomplete="off" required></div>
+        <div class="field"><label for="nuOrigem">Origem <span class="faint">(opcional)</span></label><input class="input" id="nuOrigem" autocomplete="off" placeholder="painel, contador-joao, indicacao-12…"></div>
         <div class="field"><label for="nuSenha">Senha</label><input class="input" id="nuSenha" type="text" autocomplete="new-password" minlength="8" placeholder="Em branco: o painel gera uma senha"></div>
         <div class="err" id="nuErr"></div>
         <div class="row" style="justify-content:flex-end"><button class="btn ghost" type="button" id="nuCancel">Cancelar</button><button class="btn primary" type="submit" id="nuGo">${icon("plus")}Criar conta</button></div>
@@ -220,7 +280,7 @@
       const btn = $("#nuGo", m.root); btn.disabled = true; $("#nuErr", m.root).textContent = "";
       const senhaDigitada = $("#nuSenha", m.root).value;
       try {
-        const r = await api("POST", "/api/admin/usuarios", { nome: $("#nuNome", m.root).value, telefone: tel.value, email: $("#nuEmail", m.root).value, senha: senhaDigitada });
+        const r = await api("POST", "/api/admin/usuarios", { nome: $("#nuNome", m.root).value, telefone: tel.value, email: $("#nuEmail", m.root).value, senha: senhaDigitada, origem: $("#nuOrigem", m.root).value });
         contaCriada(m, r.usuario, r.senha || senhaDigitada, !!r.senha);
         if (location.hash.startsWith("#usuarios")) carregar();
       } catch (ex) { $("#nuErr", m.root).textContent = ex.message; btn.disabled = false; }
@@ -264,7 +324,15 @@
           <div class="k">${icon("box")}Uso</div><div class="v" style="padding:6px">${u.insumos} insumos · ${u.receitas} fichas</div>
           <div class="k">${icon("coin")}Total pago</div><div class="v" style="padding:6px">${brl(u.totalPago)}</div>
           <div class="k">${icon("history")}Cadastro</div><div class="v" style="padding:6px">${dataBR(u.criadoEm)} · último acesso ${relativo(u.ultimoAcesso)}</div>
+          <div class="k">${icon("tag")}Origem</div><div class="v" style="padding:6px">${origemTag(u)}</div>
         </div>
+
+        <div class="h2" style="font-size:16px">Funil</div>
+        <ol class="marcos">
+          ${[["Cadastro", u.criadoEm], ["1ª ficha com 3+ insumos", u.fichaCompletaEm], ["Chegou ao limite do Free", u.limiteEm], ["Clicou em Assinar", u.assinarEm], ["Virou Pro", u.jaFoiPro ? (d.pagamentos.length ? d.pagamentos[d.pagamentos.length - 1].aprovadoEm || d.pagamentos[d.pagamentos.length - 1].criadoEm : u.proAte) : null]]
+            .map(([t, dt], i) => `<li class="${dt ? "ok" : ""}"><span class="mk">${dt ? icon("check") : i + 1}</span><span>${t}</span><b class="num">${dt ? (i === 4 && !d.pagamentos.length ? "sim" : dataBR(dt)) : "—"}</b></li>`).join("")}
+        </ol>
+        ${semFichaEm3(u) || (u.limiteEm && u.plano === "free" && !u.jaFoiPro) ? `<a class="btn" style="margin-top:8px" target="_blank" rel="noopener" href="${wa(u, MSG_FUNIL[u.limiteEm ? "limite" : "sem-ficha"](u))}">${icon("send")}Chamar no WhatsApp com mensagem pronta</a>` : ""}
 
         <div class="h2" style="font-size:16px">Plano Pro</div>
         <p class="small muted" style="margin:0 0 8px"><b>1.</b> Escolha o período. <b>2.</b> Confira o resumo e clique em <b>Concluir liberação</b>. Nada muda antes da conclusão.</p>

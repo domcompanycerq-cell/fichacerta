@@ -36,12 +36,30 @@
     if (!S.me || !ofertaAtiva() || isPro()) return "";
     return `<div class="offer">${'<span class="o-ico">'}${icon("gift")}</span>
       <div class="o-txt"><b>Oferta de boas-vindas: Pro por R$ ${fmt(precoOferta(), 2)} no primeiro mês</b><span>Insumos e fichas sem limite e histórico de preços. Depois, R$ ${fmt(S.me.preco, 2)}/mês.</span></div>
-      <a class="btn" href="${linkSuporte("assinar")}" target="_blank" rel="noopener">${icon("chat")}Quero a oferta</a></div>`;
+      <a class="btn" data-assinar href="${linkSuporte("assinar")}" target="_blank" rel="noopener">${icon("chat")}Quero a oferta</a></div>`;
   }
   const telSuporte = () => { const d = String(S.cfg.suporteWhatsApp || "5515988305442"); return `+${d.slice(0, 2)} (${d.slice(2, 4)}) ${d.slice(4, -4)}-${d.slice(-4)}`; };
   const motivoPro = () => (S.me && (S.me.plano === "pro" || S.me.vencido) ? "renovar" : "assinar");
 
+  // Origem do cadastro: o link da bio, de uma DM ou de um parceiro traz ?origem=... Fica guardada até a pessoa criar a conta.
+  const CHAVE_ORIGEM = "cmv-origem";
+  function guardarOrigem() {
+    const q = new URLSearchParams(location.search);
+    const o = (q.get("origem") || "").toLowerCase().replace(/[^a-z0-9_-]/g, "").slice(0, 60);
+    if (o) { try { localStorage.setItem(CHAVE_ORIGEM, o); } catch (e) { /* sem armazenamento: segue sem origem */ } }
+    if (q.has("origem")) history.replaceState(null, "", location.pathname + location.hash);
+    return !!o;
+  }
+  const lerOrigem = () => { try { return localStorage.getItem(CHAVE_ORIGEM) || ""; } catch (e) { return ""; } };
+  // Clique em Assinar/Renovar: abre o WhatsApp e avisa o servidor (marco do funil).
+  document.addEventListener("click", (e) => {
+    if (!S.me || !e.target.closest("a[data-assinar]")) return;
+    fetch("/api/eventos/assinar", { method: "POST", keepalive: true, credentials: "same-origin", headers: { "X-Requested-With": "fetch" } }).catch(() => {});
+  });
+
+  let veioDeLink = false;
   async function boot() {
+    veioDeLink = guardarOrigem() || veioDeLink;
     try { Object.assign(S.cfg, await api("GET", "/api/config")); } catch (e) { /* usa o padrão */ }
     const h = location.hash;
     if (h.startsWith("#redefinir=")) return renderAuth("redefinir", h.slice(11));
@@ -53,7 +71,8 @@
       renderShell();
     } catch (e) {
       if (e.code === "bloqueado") return renderAuth("login", null, e.message);
-      renderAuth("login");
+      // Quem chega por um link de divulgação ainda não tem conta: abre direto no cadastro.
+      renderAuth(veioDeLink ? "cadastro" : "login");
     }
   }
   async function carregarDados() {
@@ -203,7 +222,10 @@
       err.textContent = ""; btn.disabled = true;
       try {
         if (modo === "login") await api("POST", "/api/auth/login", { email: $("#email").value, senha: $("#senha").value });
-        if (modo === "cadastro") await api("POST", "/api/auth/cadastro", { nome: $("#nome").value, telefone: $("#tel").value, email: $("#email").value, senha: $("#senha").value });
+        if (modo === "cadastro") {
+          await api("POST", "/api/auth/cadastro", { nome: $("#nome").value, telefone: $("#tel").value, email: $("#email").value, senha: $("#senha").value, origem: lerOrigem() });
+          try { localStorage.removeItem(CHAVE_ORIGEM); } catch (e) { /* ignora */ }
+        }
         if (modo === "esqueci") { const r = await api("POST", "/api/auth/esqueci", { email: $("#email").value }); err.style.color = "var(--text-2)"; err.textContent = r.mensagem; btn.disabled = false; return; }
         if (modo === "redefinir") { await api("POST", "/api/auth/redefinir", { token, senha: $("#senha").value }); history.replaceState(null, "", "/"); renderAuth("login", null, "Senha alterada. Entre com a nova senha."); return; }
         location.hash = modo === "cadastro" ? "#inicio" : location.hash;
@@ -364,7 +386,7 @@
       <p class="muted" style="margin:0 0 14px">${esc(msg)}</p>
       <div class="plan ${ofertaAtiva() ? "featured" : ""}" style="margin:${ofertaAtiva() ? "18px" : "0"} 0 14px">${ofertaAtiva() ? `<span class="ribbon">Oferta de boas-vindas</span><div class="price"><s>R$ ${fmt(S.me.preco, 2)}</s>R$ ${fmt(precoOferta(), 2)} <small>no 1º mês</small></div><span class="small muted">Depois, R$ ${fmt(S.me.preco, 2)}/mês.</span>` : `<div class="price">R$ ${fmt(S.me.preco, 2)} <small>/ mês</small></div>`}
         <ul><li>${icon("check")}Insumos e fichas técnicas ilimitados</li><li>${icon("check")}Histórico de preços de cada insumo</li><li>${icon("check")}Seus dados continuam salvos se o plano vencer</li></ul></div>
-      <div class="row" style="justify-content:flex-end"><button class="btn ghost" id="mc">Agora não</button><a class="btn ${ofertaAtiva() ? "accent" : "primary"}" id="mg" href="${linkSuporte(motivoPro())}" target="_blank" rel="noopener">${icon("chat")}${ofertaAtiva() ? "Quero a oferta" : "Assinar pelo WhatsApp"}</a></div>
+      <div class="row" style="justify-content:flex-end"><button class="btn ghost" id="mc">Agora não</button><a class="btn ${ofertaAtiva() ? "accent" : "primary"}" id="mg" data-assinar href="${linkSuporte(motivoPro())}" target="_blank" rel="noopener">${icon("chat")}${ofertaAtiva() ? "Quero a oferta" : "Assinar pelo WhatsApp"}</a></div>
       <p class="small faint" style="margin:10px 0 0;text-align:right">O pagamento é feito com o suporte: ${esc(telSuporte())}</p>
     </div>`, { center: true });
     $("#mc", m.root).onclick = m.close;
@@ -379,7 +401,7 @@
     if (!b.insumos && !b.receitas) return "";
     const partes = [b.insumos ? `${b.insumos} insumo${b.insumos > 1 ? "s" : ""}` : "", b.receitas ? `${b.receitas} ficha${b.receitas > 1 ? "s" : ""}` : ""].filter(Boolean).join(" e ");
     return `<div class="callout red">${icon("lock")}<div class="ct"><b>${partes} bloqueado${b.insumos + b.receitas > 1 ? "s" : ""}.</b> Sua conta está no plano Free e eles passam do limite. Nada foi apagado: ficam guardados e voltam assim que você renovar o Pro.
-      <div style="margin-top:8px"><a class="btn primary" href="${linkSuporte("renovar")}" target="_blank" rel="noopener">Renovar pelo WhatsApp</a></div></div></div>`;
+      <div style="margin-top:8px"><a class="btn primary" data-assinar href="${linkSuporte("renovar")}" target="_blank" rel="noopener">Renovar pelo WhatsApp</a></div></div></div>`;
   }
 
   /* ================= início (painel) ================= */
@@ -856,7 +878,7 @@
       $("#nl").innerHTML = r.notificacoes.length ? r.notificacoes.map((n) => `<div class="list-item"><span class="dot ${n.lida ? "read" : ""}"></span><div class="li-body">
         <div class="li-title">${esc(n.titulo)} ${n.tipo === "renovacao" ? '<span class="tag yellow">Renovação</span>' : ""}</div>
         <div style="font-size:14px;white-space:pre-wrap">${esc(n.mensagem)}</div><div class="li-meta">${dataHoraBR(n.criadoEm)}</div>
-        ${n.tipo === "renovacao" ? `<a class="btn primary" style="margin-top:8px" href="${linkSuporte("renovar")}" target="_blank" rel="noopener">Renovar pelo WhatsApp</a>` : ""}</div></div>`).join("") : `<div class="empty">Nenhuma notificação.</div>`;
+        ${n.tipo === "renovacao" ? `<a class="btn primary" style="margin-top:8px" data-assinar href="${linkSuporte("renovar")}" target="_blank" rel="noopener">Renovar pelo WhatsApp</a>` : ""}</div></div>`).join("") : `<div class="empty">Nenhuma notificação.</div>`;
       $$("[data-href]", $("#nl")).forEach((b) => b.addEventListener("click", () => { location.hash = b.dataset.href; }));
       if (S.me.naoLidas) { await api("POST", "/api/notificacoes/lidas"); S.me.naoLidas = 0; renderSidebar(); }
     } catch (e) { tratarErro(e); }
@@ -879,7 +901,7 @@
         <div class="plan ${isPro() ? "current" : ofertaAtiva() ? "featured" : ""}">${!isPro() && ofertaAtiva() ? '<span class="ribbon">Oferta de boas-vindas</span>' : ""}<div class="row" style="justify-content:space-between"><b>Pro</b>${isPro() ? '<span class="tag green">Seu plano</span>' : ""}</div>
           ${!isPro() && ofertaAtiva() ? `<div class="price"><s>R$ ${fmt(me.preco, 2)}</s>R$ ${fmt(precoOferta(), 2)} <small>nos primeiros ${me.oferta.dias} dias</small></div><span class="small muted" style="margin-top:-6px">Depois, R$ ${fmt(me.preco, 2)}/mês. Só para a primeira assinatura.</span>` : `<div class="price">R$ ${fmt(me.preco, 2)} <small>/ mês</small></div>`}
           <ul><li>${icon("check")}Insumos ilimitados</li><li>${icon("check")}Fichas técnicas ilimitadas</li><li>${icon("check")}Recálculo automático das fichas</li><li>${icon("check")}Histórico de preços dos insumos</li></ul>
-          <a class="btn ${!isPro() && ofertaAtiva() ? "accent" : "primary"} block" href="${linkSuporte(motivoPro())}" target="_blank" rel="noopener">${icon("chat")}${isPro() || me.vencido ? "Renovar pelo WhatsApp" : ofertaAtiva() ? `Assinar por R$ ${fmt(precoOferta(), 2)} pelo WhatsApp` : "Assinar pelo WhatsApp"}</a>
+          <a class="btn ${!isPro() && ofertaAtiva() ? "accent" : "primary"} block" data-assinar href="${linkSuporte(motivoPro())}" target="_blank" rel="noopener">${icon("chat")}${isPro() || me.vencido ? "Renovar pelo WhatsApp" : ofertaAtiva() ? `Assinar por R$ ${fmt(precoOferta(), 2)} pelo WhatsApp` : "Assinar pelo WhatsApp"}</a>
           <span class="small faint">O pagamento é combinado com o suporte no WhatsApp ${esc(telSuporte())}. Assim que for confirmado, o Pro é liberado na sua conta por 30 dias.</span></div>
       </div>
       <div class="callout">${icon("info")}<div class="ct small">Ao abrir o WhatsApp, a mensagem já vai com o seu e-mail de cadastro (${esc(me.email)}) para o suporte localizar sua conta.</div></div>
