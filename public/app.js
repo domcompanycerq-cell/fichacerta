@@ -37,7 +37,7 @@
   function ofertaBanner() {
     if (!S.me || !ofertaAtiva() || isPro()) return "";
     return `<div class="offer">${'<span class="o-ico">'}${icon("gift")}</span>
-      <div class="o-txt"><b>Oferta de boas-vindas: Pro por R$ ${fmt(precoOferta(), 2)} no primeiro mês</b><span>Insumos e fichas sem limite e histórico de preços. Depois, R$ ${fmt(S.me.preco, 2)}/mês.</span></div>
+      <div class="o-txt"><b>Oferta de boas-vindas: Pro por R$&nbsp;${fmt(precoOferta(), 2)} no primeiro mês</b><span>Insumos e fichas sem limite e histórico de preços. Depois, R$ ${fmt(S.me.preco, 2)}/mês.</span></div>
       <a class="btn" data-assinar href="${linkSuporte("assinar")}" target="_blank" rel="noopener">${icon("chat")}Quero a oferta</a></div>`;
   }
   const telSuporte = () => { const d = String(S.cfg.suporteWhatsApp || "5515988305442"); return `+${d.slice(0, 2)} (${d.slice(2, 4)}) ${d.slice(4, -4)}-${d.slice(-4)}`; };

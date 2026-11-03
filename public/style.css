@@ -661,3 +661,10 @@ table.db tr.locked .title-cell svg { color: var(--red); }
 .admin-me .who { min-width: 0; overflow: hidden; display: flex; flex-direction: column; line-height: 1.25; font-weight: 600; font-size: 13px; }
 .admin-me .who small { color: var(--text-3); font-weight: 500; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ws .who small { overflow: hidden; text-overflow: ellipsis; }
+
+/* Estados vazios: título centralizado também dentro de painéis (o .panel h3 alinha título e link nas pontas)
+   e texto com linhas equilibradas, sem palavra sozinha na última linha. */
+.empty-state h3, .panel.empty-state h3 { display: block; text-align: center; text-wrap: balance; }
+.empty-state p { text-wrap: balance; max-width: 46ch; }
+.page-desc, .hello p, .callout .ct, .offer .o-txt span { text-wrap: pretty; }
+.offer .o-txt b { text-wrap: balance; }
