@@ -23,6 +23,7 @@
     vencido: { titulo: "Seu plano Pro venceu", mensagem: "Seu plano Pro venceu e a conta voltou ao Free. Seus dados continuam salvos. Fale com o suporte no WhatsApp para renovar e voltar ao acesso completo." },
     oferta: { titulo: "Oferta: Pro por R$ 10 no primeiro mês", mensagem: "Experimente o plano Pro com desconto: os primeiros 30 dias saem por R$ 10 (depois, R$ 25/mês). Insumos e fichas sem limite e histórico de preços. Para aproveitar, toque em Plano e assinatura e fale com o suporte no WhatsApp." },
     convite: { titulo: "Conheça o plano Pro", mensagem: "Com o Pro você cadastra insumos e fichas técnicas sem limite e acompanha o histórico de preços de cada insumo. Para assinar, fale com o suporte no WhatsApp pela página Plano e assinatura." },
+    freeMaior: { titulo: "Agora dá para montar 3 fichas de graça", mensagem: "Boa notícia: o plano Free do CMV Certo ficou maior. Agora você cadastra até 25 insumos e monta até 3 fichas técnicas sem pagar nada. Itens que estavam com cadeado foram liberados até esses novos limites. Aproveite para montar a ficha do seu prato mais vendido e ver quanto ele custa de verdade." },
   };
 
   async function boot() {
@@ -421,7 +422,7 @@
             : `<select class="input" id="dest">${FILTROS.map(([k, t]) => `<option value="${k}" ${o.filtro === k ? "selected" : ""}>${k === "todos" ? "Todos os usuários" : t}</option>`).join("")}</select>`}
         </div>
         <div class="field"><label>Modelo</label><div class="row">
-          <button type="button" class="btn" data-m="renovacao">Renovação</button><button type="button" class="btn" data-m="vencido">Plano vencido</button><button type="button" class="btn" data-m="oferta">Oferta R$ 10</button><button type="button" class="btn" data-m="convite">Convite para o Pro</button></div></div>
+          <button type="button" class="btn" data-m="renovacao">Renovação</button><button type="button" class="btn" data-m="vencido">Plano vencido</button><button type="button" class="btn" data-m="oferta">Oferta R$ 10</button><button type="button" class="btn" data-m="convite">Convite para o Pro</button><button type="button" class="btn" data-m="freeMaior">Free maior (25 e 3)</button></div></div>
         <div class="field"><label for="nt">Título</label><input class="input" id="nt" maxlength="120"></div>
         <div class="field"><label for="nm">Mensagem</label><textarea class="input" id="nm" rows="5" maxlength="2000"></textarea></div>
         <label class="row small"><input type="checkbox" id="ne" ${S.resumo && !S.resumo.emailAtivo ? "" : "checked"}> Enviar também por e-mail</label>
@@ -435,7 +436,7 @@
       <p class="muted small" style="margin:0 0 8px">O servidor verifica a cada hora e avisa cada assinante 7 dias antes, 1 dia antes e no dia em que o Pro vence (no app e por e-mail). Cada aviso sai uma única vez por ciclo.</p>
       <button class="btn" id="runRem">Verificar agora</button> <span class="small muted" id="remOut"></span>
     </div>`;
-    const aplicar = (k) => { $("#nt").value = MODELOS[k].titulo; $("#nm").value = MODELOS[k].mensagem; if (k !== "convite") $("#nr").checked = true; };
+    const aplicar = (k) => { $("#nt").value = MODELOS[k].titulo; $("#nm").value = MODELOS[k].mensagem; if (!["convite", "freeMaior"].includes(k)) $("#nr").checked = true; };
     $$("[data-m]").forEach((b) => b.addEventListener("click", () => aplicar(b.dataset.m)));
     if (o.modelo) aplicar(o.modelo);
     const tr = $("#trocar"); if (tr) tr.onclick = () => viewNotificar();

@@ -30,6 +30,8 @@
     return `https://wa.me/${num}?text=${encodeURIComponent(msg)}`;
   }
   // Oferta de boas-vindas: primeiros 30 dias do Pro por R$ 10 para quem nunca assinou.
+  // Limites do Free vêm do servidor (/api/config); o padrão só vale se a configuração não carregar.
+  const limFree = () => S.cfg.limitesFree || { insumos: 25, receitas: 3 };
   const ofertaAtiva = () => !S.me || !!(S.me.oferta && S.me.oferta.disponivel);
   const precoOferta = () => (S.me && S.me.oferta ? S.me.oferta.preco : S.cfg.precoOferta) || 10;
   function ofertaBanner() {
@@ -184,7 +186,7 @@
     const planos = modo === "cadastro" ? `
       <div class="auth-plans">
         <div class="plan"><b>Free</b><ul>
-          <li>${icon("check")}Até 10 insumos</li><li>${icon("check")}Até 2 fichas técnicas</li><li>${icon("check")}Recálculo automático</li>
+          <li>${icon("check")}Até ${limFree().insumos} insumos</li><li>${icon("check")}Até ${limFree().receitas} fichas técnicas</li><li>${icon("check")}Recálculo automático</li>
           <li class="no">${icon("minus")}Histórico de preços</li></ul></div>
         <div class="plan featured"><span class="ribbon">1º mês por R$ ${fmt(S.cfg.precoOferta || 10, 2)}</span><b>Pro · R$ ${fmt(S.cfg.preco || 25, 2)}/mês</b><ul>
           <li>${icon("check")}Insumos ilimitados</li><li>${icon("check")}Fichas técnicas ilimitadas</li><li>${icon("check")}Recálculo automático</li>
@@ -394,8 +396,8 @@
   }
 
   // Itens além do limite do Free (ex.: Pro vencido) ficam bloqueados, nunca apagados.
-  const MSG_INS_BLOQ = "Este insumo está bloqueado porque sua conta está no plano Free (até 10 insumos). Nada foi apagado: renove o Pro para desbloquear.";
-  const MSG_FICHA_BLOQ = "Esta ficha está bloqueada porque sua conta está no plano Free (até 2 fichas). Nada foi apagado: renove o Pro para desbloquear.";
+  const MSG_INS_BLOQ = () => `Este insumo está bloqueado porque sua conta está no plano Free (até ${limFree().insumos} insumos). Nada foi apagado: renove o Pro para desbloquear.`;
+  const MSG_FICHA_BLOQ = () => `Esta ficha está bloqueada porque sua conta está no plano Free (até ${limFree().receitas} fichas). Nada foi apagado: renove o Pro para desbloquear.`;
   function avisoBloqueio() {
     const b = S.me.bloqueados || { insumos: 0, receitas: 0 };
     if (!b.insumos && !b.receitas) return "";
@@ -589,7 +591,7 @@
   const singular = (u) => String(u || "porção").replace(/ões$/, "ão").replace(/s$/, "");
 
   function peekInsumo(id) {
-    if (id && S.insMap[id] && S.insMap[id].bloqueado) return upsell(MSG_INS_BLOQ);
+    if (id && S.insMap[id] && S.insMap[id].bloqueado) return upsell(MSG_INS_BLOQ());
     const i = id ? S.insMap[id] : { nome: "", qtd: 1, unidade: "kg", preco: "" };
     const usadas = id ? usadoEm(id) : [];
     const p = overlay(`<div class="peek" role="dialog" aria-modal="true"><div class="sheet-grab"></div>
@@ -719,7 +721,7 @@
     const nova = novaFicha;
     $("#nova").onclick = nova; $("#novaCard").onclick = nova;
     setFab(nova, "Nova ficha técnica");
-    $$(".gcard[data-id]").forEach((b) => b.addEventListener("click", () => { if (b.dataset.bloq) upsell(MSG_FICHA_BLOQ); else location.hash = `#ficha/${b.dataset.id}`; }));
+    $$(".gcard[data-id]").forEach((b) => b.addEventListener("click", () => { if (b.dataset.bloq) upsell(MSG_FICHA_BLOQ()); else location.hash = `#ficha/${b.dataset.id}`; }));
     $("#q").addEventListener("input", (e) => { S.qRec = e.target.value; const pos = e.target.selectionStart; viewFichas(); const n = $("#q"); n.focus(); n.setSelectionRange(pos, pos); });
   }
 
@@ -727,7 +729,7 @@
     const id = arg === "nova" ? null : Number(arg);
     const orig = id ? S.receitas.find((r) => r.id === id) : null;
     if (id && !orig) { location.hash = "#fichas"; return; }
-    if (orig && orig.bloqueado) { location.hash = "#fichas"; upsell(MSG_FICHA_BLOQ); return; }
+    if (orig && orig.bloqueado) { location.hash = "#fichas"; upsell(MSG_FICHA_BLOQ()); return; }
     if (!S.insumos.length) { location.hash = "#insumos"; return; }
     const r = orig ? JSON.parse(JSON.stringify(orig)) : { nome: "", categoria: "", rendimento: 1, unidadeRend: "porções", cmvAlvo: 30, precoVenda: 0, preparo: "", itens: [] };
     crumb(`Fichas técnicas / ${r.nome || "Nova ficha"}`);
@@ -897,7 +899,7 @@
       <div class="plans">
         <div class="plan ${!isPro() ? "current" : ""}"><div class="row" style="justify-content:space-between"><b>Free</b>${!isPro() ? '<span class="tag green">Seu plano</span>' : ""}</div>
           <div class="price">R$ 0</div>
-          <ul><li>${icon("check")}Até 10 insumos</li><li>${icon("check")}Até 2 fichas técnicas</li><li>${icon("check")}Recálculo automático das fichas</li><li class="no">${icon("minus")}Histórico de preços</li></ul></div>
+          <ul><li>${icon("check")}Até ${limFree().insumos} insumos</li><li>${icon("check")}Até ${limFree().receitas} fichas técnicas</li><li>${icon("check")}Recálculo automático das fichas</li><li class="no">${icon("minus")}Histórico de preços</li></ul></div>
         <div class="plan ${isPro() ? "current" : ofertaAtiva() ? "featured" : ""}">${!isPro() && ofertaAtiva() ? '<span class="ribbon">Oferta de boas-vindas</span>' : ""}<div class="row" style="justify-content:space-between"><b>Pro</b>${isPro() ? '<span class="tag green">Seu plano</span>' : ""}</div>
           ${!isPro() && ofertaAtiva() ? `<div class="price"><s>R$ ${fmt(me.preco, 2)}</s>R$ ${fmt(precoOferta(), 2)} <small>nos primeiros ${me.oferta.dias} dias</small></div><span class="small muted" style="margin-top:-6px">Depois, R$ ${fmt(me.preco, 2)}/mês. Só para a primeira assinatura.</span>` : `<div class="price">R$ ${fmt(me.preco, 2)} <small>/ mês</small></div>`}
           <ul><li>${icon("check")}Insumos ilimitados</li><li>${icon("check")}Fichas técnicas ilimitadas</li><li>${icon("check")}Recálculo automático das fichas</li><li>${icon("check")}Histórico de preços dos insumos</li></ul>

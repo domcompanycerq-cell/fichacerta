@@ -83,8 +83,8 @@ async function userOut(u) {
     bloqueados: { insumos: b.insumos.size, receitas: b.receitas.size },
   };
 }
-const MSG_BLOQ_INSUMO = "Este insumo está bloqueado: sua conta está no plano Free, que permite até 10 insumos. Nada foi apagado. Renove o Pro para desbloquear.";
-const MSG_BLOQ_FICHA = "Esta ficha está bloqueada: sua conta está no plano Free, que permite até 2 fichas técnicas. Nada foi apagado. Renove o Pro para desbloquear.";
+const MSG_BLOQ_INSUMO = `Este insumo está bloqueado: sua conta está no plano Free, que permite até ${planos.LIMITES.free.insumos} insumos. Nada foi apagado. Renove o Pro para desbloquear.`;
+const MSG_BLOQ_FICHA = `Esta ficha está bloqueada: sua conta está no plano Free, que permite até ${planos.LIMITES.free.receitas} fichas técnicas. Nada foi apagado. Renove o Pro para desbloquear.`;
 const insumoOut = (r, bloq) => ({ id: r.id, nome: r.nome, qtd: r.qtd, unidade: r.unidade, preco: r.preco, criadoEm: r.criado_em, atualizadoEm: r.atualizado_em, bloqueado: !!(bloq && bloq.insumos.has(r.id)) });
 const receitaOut = (r) => ({
   id: r.id, nome: r.nome, categoria: r.categoria, rendimento: r.rendimento, unidadeRend: r.unidade_rend,
@@ -193,7 +193,8 @@ app.post("/api/auth/redefinir", h(async (req, res) => {
 /* ---------------- conta ---------------- */
 // Dados públicos para a tela de login (nome do app e WhatsApp do suporte).
 app.get("/api/config", (req, res) => {
-  res.json({ appName: notif.APP_NAME, suporteWhatsApp: notif.SUPORTE_WHATSAPP, preco: planos.PRECO_PRO, precoOferta: planos.PRECO_OFERTA, diasOferta: planos.DIAS_OFERTA });
+  res.json({ appName: notif.APP_NAME, suporteWhatsApp: notif.SUPORTE_WHATSAPP, preco: planos.PRECO_PRO, precoOferta: planos.PRECO_OFERTA, diasOferta: planos.DIAS_OFERTA,
+    limitesFree: { insumos: planos.LIMITES.free.insumos, receitas: planos.LIMITES.free.receitas } });
 });
 
 app.get("/api/me", h(async (req, res) => {

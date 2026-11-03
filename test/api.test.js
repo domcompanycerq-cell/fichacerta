@@ -12,6 +12,7 @@ const assert = require("node:assert/strict");
 const app = require("../server");
 const { run, fechar } = require("../lib/db");
 const { rodarLembretes } = require("../lib/notificacoes");
+const FREE = require("../lib/planos").LIMITES.free; // limites do Free usados nos testes (hoje 25 insumos e 3 fichas)
 
 let server, base;
 before(async () => {
@@ -53,7 +54,7 @@ test("cadastro valida campos e começa no Free", async () => {
   const r = await c("POST", "/api/auth/cadastro", { nome: "Ana Lima", telefone: "15998765432", email: "ana@x.com", senha: "senha-forte-1" });
   assert.equal(r.status, 201);
   assert.equal(r.body.user.plano, "free");
-  assert.deepEqual(r.body.user.limites, { insumos: 10, receitas: 2, historico: false });
+  assert.deepEqual(r.body.user.limites, { insumos: 25, receitas: 3, historico: false });
   assert.equal((await c("POST", "/api/auth/cadastro", { nome: "Ana", telefone: "15998765432", email: "ANA@x.com", senha: "senha-forte-1" })).status, 409);
   // dados persistem: novo login enxerga a mesma conta
   const c2 = cliente();
@@ -72,16 +73,16 @@ test("limites do Free, recálculo e liberação do Pro", async () => {
   const { c, id } = await novoUsuario("free@x.com");
   const arroz = (await c("POST", "/api/insumos", { nome: "Arroz", qtd: "1", unidade: "kg", preco: "3,60" })).body.insumo;
   assert.equal(arroz.preco, 3.6);
-  for (let i = 2; i <= 10; i++) assert.equal((await c("POST", "/api/insumos", { nome: `Item ${i}`, qtd: 1, unidade: "kg", preco: 1 })).status, 201);
-  const onze = await c("POST", "/api/insumos", { nome: "Item 11", qtd: 1, unidade: "kg", preco: 1 });
+  for (let i = 2; i <= FREE.insumos; i++) assert.equal((await c("POST", "/api/insumos", { nome: `Item ${i}`, qtd: 1, unidade: "kg", preco: 1 })).status, 201);
+  const onze = await c("POST", "/api/insumos", { nome: "Item extra", qtd: 1, unidade: "kg", preco: 1 });
   assert.equal(onze.status, 402);
   assert.equal(onze.body.code, "limite");
 
   const ficha = { nome: "Arroz branco", rendimento: 10, cmvAlvo: 30, itens: [{ insumoId: arroz.id, qtd: 200, unidade: "g", fc: 1 }] };
   const r1 = await c("POST", "/api/receitas", ficha);
   assert.equal(r1.status, 201);
-  assert.equal((await c("POST", "/api/receitas", { ...ficha, nome: "Segunda" })).status, 201);
-  assert.equal((await c("POST", "/api/receitas", { ...ficha, nome: "Terceira" })).status, 402);
+  for (let i = 2; i <= FREE.receitas; i++) assert.equal((await c("POST", "/api/receitas", { ...ficha, nome: `Ficha ${i}` })).status, 201);
+  assert.equal((await c("POST", "/api/receitas", { ...ficha, nome: "Ficha extra" })).status, 402);
   // unidade incompatível
   assert.equal((await c("PUT", `/api/receitas/${r1.body.receita.id}`, { ...ficha, itens: [{ insumoId: arroz.id, qtd: 1, unidade: "ml" }] })).status, 400);
 
@@ -89,7 +90,7 @@ test("limites do Free, recálculo e liberação do Pro", async () => {
   const up = await c("PUT", `/api/insumos/${arroz.id}`, { nome: "Arroz", qtd: 1, unidade: "kg", preco: "5,00" });
   assert.equal(up.status, 200);
   assert.equal(up.body.mudouPreco, true);
-  assert.equal(up.body.impacto.length, 2);
+  assert.equal(up.body.impacto.length, FREE.receitas);
   assert.ok(Math.abs(up.body.impacto[0].antes - 0.072) < 1e-9);
   assert.ok(Math.abs(up.body.impacto[0].depois - 0.1) < 1e-9);
   // não exclui insumo em uso; não troca para unidade de outro tipo
@@ -107,20 +108,20 @@ test("limites do Free, recálculo e liberação do Pro", async () => {
   assert.equal(me.plano, "pro");
   assert.equal(me.limites.insumos, null);
   assert.ok(me.naoLidas >= 1);
-  assert.equal((await c("POST", "/api/insumos", { nome: "Item 11", qtd: 1, unidade: "kg", preco: 1 })).status, 201);
-  assert.equal((await c("POST", "/api/receitas", { ...ficha, nome: "Terceira" })).status, 201);
+  assert.equal((await c("POST", "/api/insumos", { nome: "Item extra", qtd: 1, unidade: "kg", preco: 1 })).status, 201);
+  assert.equal((await c("POST", "/api/receitas", { ...ficha, nome: "Ficha extra" })).status, 201);
   const h = await c("GET", "/api/historico");
   assert.equal(h.status, 200);
   const mud = h.body.historico.find((x) => x.nome === "Arroz" && x.precoAnterior === 3.6);
   assert.ok(mud, "histórico registra a mudança feita ainda no Free");
-  assert.equal(mud.impacto.length, 2);
+  assert.equal(mud.impacto.length, FREE.receitas);
 
   // vencimento: volta a ser Free, dados permanecem
   await run("UPDATE users SET pro_ate = $1 WHERE id = $2", new Date(Date.now() - 864e5).toISOString(), id);
   const venc = (await c("GET", "/api/me")).body.user;
   assert.equal(venc.plano, "free");
   assert.equal(venc.vencido, true);
-  assert.equal(venc.uso.insumos, 11);
+  assert.equal(venc.uso.insumos, FREE.insumos + 1);
   assert.equal((await c("GET", "/api/historico")).status, 402);
   assert.equal((await c("POST", "/api/insumos", { nome: "Item 12", qtd: 1, unidade: "kg", preco: 1 })).status, 402);
   // edição de preço de item existente continua permitida
@@ -155,10 +156,10 @@ test("usuários não enxergam dados uns dos outros", async () => {
 
 test("importação por lista respeita o limite do Free", async () => {
   const { c } = await novoUsuario("imp@x.com");
-  const linhas = Array.from({ length: 12 }, (_, i) => `Item ${i + 1}, 1kg, R$${i + 1},50`);
+  const linhas = Array.from({ length: FREE.insumos + 2 }, (_, i) => `Item ${i + 1}, 1kg, R$${i + 1},50`);
   linhas.push("linha sem formato");
   const r = await c("POST", "/api/insumos/importar", { linhas });
-  assert.equal(r.body.criados, 10);
+  assert.equal(r.body.criados, FREE.insumos);
   assert.equal(r.body.limite, true);
   assert.equal(r.body.rejeitadas.length, 3);
 });
@@ -203,35 +204,37 @@ test("Pro vencido: itens além do Free ficam bloqueados, nunca apagados", async 
   await a("POST", "/api/auth/login", { email: "admin@teste.com", senha: "admin-senha-123" });
   await a("POST", `/api/admin/usuarios/${id}/pro`, { dias: 30 });
   const ids = [];
-  for (let i = 1; i <= 12; i++) ids.push((await c("POST", "/api/insumos", { nome: `Insumo ${i}`, qtd: 1, unidade: "kg", preco: i })).body.insumo.id);
+  const total = FREE.insumos + 2;
+  for (let i = 1; i <= total; i++) ids.push((await c("POST", "/api/insumos", { nome: `Insumo ${i}`, qtd: 1, unidade: "kg", preco: i })).body.insumo.id);
+  const [novo1, novo2] = [ids[total - 2], ids[total - 1]]; // os dois mais novos, além do limite
   const ficha = (n, insumoId) => ({ nome: n, rendimento: 1, cmvAlvo: 30, itens: [{ insumoId, qtd: 100, unidade: "g" }] });
   const f1 = (await c("POST", "/api/receitas", ficha("F1", ids[0]))).body.receita;
-  await c("POST", "/api/receitas", ficha("F2", ids[1]));
-  const f3 = (await c("POST", "/api/receitas", ficha("F3", ids[11]))).body.receita;
+  for (let i = 2; i <= FREE.receitas; i++) await c("POST", "/api/receitas", ficha(`F${i}`, ids[1]));
+  const f3 = (await c("POST", "/api/receitas", ficha("F extra", novo2))).body.receita;
 
   // vence o Pro
   await run("UPDATE users SET pro_ate = $1 WHERE id = $2", new Date(Date.now() - 864e5).toISOString(), id);
   const me = (await c("GET", "/api/me")).body.user;
   assert.deepEqual(me.bloqueados, { insumos: 2, receitas: 1 });
   const lista = (await c("GET", "/api/insumos")).body.insumos;
-  assert.equal(lista.length, 12, "nada foi apagado");
-  assert.deepEqual(lista.filter((i) => i.bloqueado).map((i) => i.id).sort(), [ids[10], ids[11]].sort(), "bloqueia os mais novos");
+  assert.equal(lista.length, total, "nada foi apagado");
+  assert.deepEqual(lista.filter((i) => i.bloqueado).map((i) => i.id).sort(), [novo1, novo2].sort(), "bloqueia os mais novos");
   // insumo bloqueado: não edita, não exclui
-  const ed = await c("PUT", `/api/insumos/${ids[11]}`, { nome: "X", qtd: 1, unidade: "kg", preco: 99 });
+  const ed = await c("PUT", `/api/insumos/${novo2}`, { nome: "X", qtd: 1, unidade: "kg", preco: 99 });
   assert.equal(ed.status, 402); assert.equal(ed.body.code, "item_bloqueado");
-  assert.equal((await c("DELETE", `/api/insumos/${ids[10]}`)).body.code, "item_bloqueado");
+  assert.equal((await c("DELETE", `/api/insumos/${novo1}`)).body.code, "item_bloqueado");
   // insumo liberado continua editável
   assert.equal((await c("PUT", `/api/insumos/${ids[0]}`, { nome: "Insumo 1", qtd: 1, unidade: "kg", preco: 2 })).status, 200);
   // fichas: a mais nova fica bloqueada e sem conteúdo exposto
   const rec = (await c("GET", "/api/receitas")).body.receitas;
-  assert.equal(rec.length, 3);
+  assert.equal(rec.length, FREE.receitas + 1);
   const r3 = rec.find((r) => r.id === f3.id);
   assert.equal(r3.bloqueado, true); assert.deepEqual(r3.itens, []);
   assert.equal((await c("GET", `/api/receitas/${f3.id}`)).body.code, "item_bloqueado");
   assert.equal((await c("PUT", `/api/receitas/${f3.id}`, ficha("F3b", ids[0]))).body.code, "item_bloqueado");
   assert.equal((await c("DELETE", `/api/receitas/${f3.id}`)).body.code, "item_bloqueado");
   // ficha liberada não pode receber insumo bloqueado novo
-  assert.equal((await c("PUT", `/api/receitas/${f1.id}`, ficha("F1", ids[10]))).status, 400);
+  assert.equal((await c("PUT", `/api/receitas/${f1.id}`, ficha("F1", novo1))).status, 400);
   // renovou: tudo volta
   await a("POST", `/api/admin/usuarios/${id}/pro`, { dias: 30 });
   const me2 = (await c("GET", "/api/me")).body.user;
@@ -364,8 +367,8 @@ test("funil: origem do cadastro, marcos de ativação, listas de contato e resum
   assert.ok(u.fichaCompletaEm, "ficha com 3 insumos marca a ativação");
   const ativou = u.fichaCompletaEm;
 
-  // chegar ao limite do Free (2 fichas) marca o limite; o marco não muda depois
-  assert.equal((await c("POST", "/api/receitas", { nome: "Outro", rendimento: 1, unidadeRend: "porções", cmvAlvo: 30, itens: ins.map((i) => ({ insumoId: i, qtd: 50, unidade: "g", fc: 1 })) })).status, 201);
+  // chegar ao limite do Free (última ficha liberada) marca o limite; o marco não muda depois
+  for (let i = 2; i <= FREE.receitas; i++) assert.equal((await c("POST", "/api/receitas", { nome: `Outro ${i}`, rendimento: 1, unidadeRend: "porções", cmvAlvo: 30, itens: ins.map((x) => ({ insumoId: x, qtd: 50, unidade: "g", fc: 1 })) })).status, 201);
   u = (await a("GET", `/api/admin/usuarios/${id}`)).body.usuario;
   assert.ok(u.limiteEm, "preencheu a última vaga do Free");
   assert.equal(u.fichaCompletaEm, ativou, "o marco guarda só a primeira vez");
@@ -398,4 +401,27 @@ test("funil: origem do cadastro, marcos de ativação, listas de contato e resum
   const semanaAtual = r.funil[r.funil.length - 1];
   assert.ok(semanaAtual.cadastros >= 1 && semanaAtual.ativados >= 1 && semanaAtual.assinar >= 1 && semanaAtual.pro >= 1);
   assert.ok(r.semFicha >= 1);
+});
+
+test("limites novos do Free (25 insumos, 3 fichas): quem cabe neles é desbloqueado sozinho", async () => {
+  assert.deepEqual({ insumos: FREE.insumos, receitas: FREE.receitas }, { insumos: 25, receitas: 3 });
+  const cfg = (await cliente()("GET", "/api/config")).body;
+  assert.deepEqual(cfg.limitesFree, { insumos: 25, receitas: 3 });
+  // conta com Pro vencido que, nos limites antigos (10 e 2), teria 2 insumos e 1 ficha bloqueados
+  const { c, id } = await novoUsuario("limites-novos@x.com");
+  await run("UPDATE users SET plano = 'pro', pro_ate = $1 WHERE id = $2", new Date(Date.now() + 864e5).toISOString(), id);
+  const ids = [];
+  for (let i = 1; i <= 12; i++) ids.push((await c("POST", "/api/insumos", { nome: `N${i}`, qtd: 1, unidade: "kg", preco: 1 })).body.insumo.id);
+  for (let i = 1; i <= 3; i++) assert.equal((await c("POST", "/api/receitas", { nome: `R${i}`, rendimento: 1, cmvAlvo: 30, itens: [{ insumoId: ids[i], qtd: 100, unidade: "g" }] })).status, 201);
+  await run("UPDATE users SET pro_ate = $1 WHERE id = $2", new Date(Date.now() - 864e5).toISOString(), id);
+  const me = (await c("GET", "/api/me")).body.user;
+  assert.equal(me.plano, "free");
+  assert.deepEqual(me.bloqueados, { insumos: 0, receitas: 0 });
+  assert.equal((await c("GET", "/api/receitas")).body.receitas.filter((r) => r.bloqueado).length, 0);
+  // e ainda dá para cadastrar até 25 insumos
+  assert.equal((await c("POST", "/api/insumos", { nome: "N13", qtd: 1, unidade: "kg", preco: 1 })).status, 201);
+  // a mensagem de bloqueio cita o limite novo
+  const bloq = (await c("POST", "/api/receitas", { nome: "R4", rendimento: 1, cmvAlvo: 30, itens: [{ insumoId: ids[0], qtd: 100, unidade: "g" }] })).body;
+  assert.equal(bloq.code, "limite");
+  assert.match(bloq.erro, /até 3 fichas/);
 });

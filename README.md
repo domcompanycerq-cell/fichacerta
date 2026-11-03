@@ -22,13 +22,13 @@ App web (instalável no celular) para cozinhas: o usuário cadastra insumos (nom
 
 | | Free | Pro (R$ 25/mês) |
 |---|---|---|
-| Insumos | até 10 | ilimitados |
-| Fichas técnicas | até 2 | ilimitadas |
+| Insumos | até 25 | ilimitados |
+| Fichas técnicas | até 3 | ilimitadas |
 | Histórico de preços | não | sim |
 
 **Oferta de boas-vindas:** quem nunca assinou paga **R$ 10 nos primeiros 30 dias** do Pro (depois, R$ 25/mês). O app mostra a oferta no Início, no menu e na página de plano, e a mensagem do WhatsApp já pede a oferta. No painel admin, o usuário elegível aparece com a etiqueta "Oferta 1º mês"; ao liberar 30 dias com "registrar pagamento recebido", o valor sugerido é R$ 10. A oferta vale uma vez por conta. O valor muda em `PRO_PRICE_OFERTA`.
 
-Os limites valem no servidor. Se o Pro vence (ou o admin volta a conta ao Free), **nada é apagado**: ficam liberados os 10 insumos e as 2 fichas mais antigos, e o restante fica **bloqueado**. Itens bloqueados aparecem com um cadeado, não podem ser editados, excluídos nem usados em fichas novas, e o conteúdo das fichas bloqueadas fica oculto. Ao renovar o Pro, tudo é desbloqueado na hora.
+Os limites valem no servidor. Se o Pro vence (ou o admin volta a conta ao Free), **nada é apagado**: ficam liberados os 25 insumos e as 3 fichas mais antigos, e o restante fica **bloqueado**. Itens bloqueados aparecem com um cadeado, não podem ser editados, excluídos nem usados em fichas novas, e o conteúdo das fichas bloqueadas fica oculto. Ao renovar o Pro, tudo é desbloqueado na hora.
 
 **Painel admin** (`/admin`)
 - Indicadores: usuários, assinantes, receita mensal, vencendo, vencidos, bloqueados, gráfico de cadastros.
