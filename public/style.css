@@ -153,7 +153,7 @@ h1, h2, h3 { margin: 0; font-weight: 700; text-wrap: balance; letter-spacing: -0
 .topbar .crumb { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 550; }
 .topbar .spacer { flex: 1; }
 .icon-btn.menu-btn { display: none; }
-.page { max-width: 920px; margin: 0 auto; padding: 28px 40px 120px; animation: entra .18s ease-out; }
+.page { max-width: 920px; margin: 0 auto; padding: 28px 40px 24px; animation: entra .18s ease-out; }
 .page.wide { max-width: 1120px; }
 @keyframes entra { from { transform: translateY(6px); } to { transform: none; } }
 .page-head { display: flex; align-items: center; gap: 14px; margin-bottom: 6px; }
@@ -168,7 +168,7 @@ h1, h2, h3 { margin: 0; font-weight: 700; text-wrap: balance; letter-spacing: -0
   .sidebar.open { transform: none; }
   .scrim-side { position: fixed; inset: 0; background: var(--overlay); z-index: 35; }
   .icon-btn.menu-btn { display: inline-grid; }
-  .page { padding: 16px 16px calc(110px + var(--tabbar-h)); }
+  .page { padding: 16px 16px 20px; }
   .page-title { font-size: 24px; }
   .page-icon { width: 40px; height: 40px; border-radius: 12px; }
   .page-icon svg { width: 22px; height: 22px; }
@@ -668,3 +668,17 @@ table.db tr.locked .title-cell svg { color: var(--red); }
 .empty-state p { text-wrap: balance; max-width: 46ch; }
 .page-desc, .hello p, .callout .ct, .offer .o-txt span { text-wrap: pretty; }
 .offer .o-txt b { text-wrap: balance; }
+
+/* ---------- crédito de autoria (rodapé) ---------- */
+.credit-wrap { display: flex; justify-content: center; padding: 8px 16px 40px; }
+.credit { display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px; border: 1px solid var(--line); border-radius: 999px; background: transparent; color: var(--text-3); font-size: 12px; text-decoration: none; transition: color .15s, border-color .15s, background .15s; }
+.credit b { color: var(--text-2); font-family: var(--font-display); font-stretch: 115%; font-weight: 800; letter-spacing: .02em; }
+.credit-at { font-family: var(--font-mono); font-size: 11px; padding-left: 8px; border-left: 1px solid var(--line); }
+.credit:hover, .credit:focus-visible { color: var(--brand); border-color: color-mix(in srgb, var(--brand) 40%, var(--line)); background: var(--brand-soft); }
+.credit:hover b { color: var(--brand); }
+.auth-credit { padding: 14px 0 0; }
+@media (max-width: 860px) {
+  /* no celular, o rodapé abre espaço para a barra de abas, o botão + e a barra de salvar da ficha */
+  .credit-wrap { padding-bottom: calc(110px + var(--tabbar-h)); }
+  .auth-credit { padding-bottom: 0; }
+}

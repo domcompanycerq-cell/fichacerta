@@ -108,6 +108,8 @@
   const { logo, wordmark } = window.UI;
   // Nome no formato da marca: primeira palavra forte, o resto leve e em minúsculas ("CMV certo").
   // logo() e wordmark() vêm de ui.js (compartilhados com o painel admin).
+  // Crédito de autoria no rodapé (abre o Instagram do desenvolvedor).
+  const credito = () => `<a class="credit" href="https://www.instagram.com/domcreator_/" target="_blank" rel="noopener" aria-label="Projeto desenvolvido por DOM. Abrir o Instagram @domcreator_">Projeto desenvolvido por <b>DOM</b><span class="credit-at">@domcreator_</span></a>`;
 
   // Fotos das fichas: escolhidas pela categoria ou pelo nome da receita.
   const FOTOS = [
@@ -203,7 +205,8 @@
         </div>
       </aside>
       <main class="auth-side"><div class="auth-box">${forms[modo]}</div>${planos}
-        <p class="auth-foot">Funciona no celular e no computador · Instale como app</p></main>
+        <p class="auth-foot">Funciona no celular e no computador · Instale como app</p>
+        <div class="credit-wrap auth-credit">${credito()}</div></main>
     </div>`;
     // Revezamento das fichas de exemplo. Para sozinho ao sair da tela de acesso e não roda para quem prefere menos movimento.
     clearInterval(timerExemplo);
@@ -253,6 +256,7 @@
         <main class="main" id="main">
           <div class="topbar" id="topbar"><button class="icon-btn menu-btn" id="menuBtn" aria-label="Abrir menu">${icon("menu")}</button><span class="crumb" id="crumb"></span><span class="spacer"></span><span id="topActions" class="row"></span></div>
           <div id="view"></div>
+          <footer class="credit-wrap">${credito()}</footer>
         </main>
       </div>
       <nav class="tabbar" id="tabbar" aria-label="Navegação"></nav>
