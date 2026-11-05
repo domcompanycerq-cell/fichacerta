@@ -109,6 +109,71 @@
   // Nome no formato da marca: primeira palavra forte, o resto leve e em minúsculas ("CMV certo").
   // logo() e wordmark() vêm de ui.js (compartilhados com o painel admin).
   // Crédito de autoria no rodapé (abre o Instagram do desenvolvedor).
+  /* ---------- instalar como app (PWA) ---------- */
+  // Android, Chrome e Edge avisam que dá para instalar (beforeinstallprompt): guardamos o aviso e abrimos a
+  // instalação nativa no toque. iPhone e iPad não têm esse aviso: mostramos o passo a passo do Safari.
+  // O botão some quando o app já está aberto instalado ou logo depois de instalar.
+  let pedidoInstalacao = null;
+  let acabouDeInstalar = false;
+  const instalado = () => acabouDeInstalar || window.navigator.standalone === true ||
+    ["standalone", "fullscreen", "minimal-ui", "window-controls-overlay"].some((m) => matchMedia(`(display-mode: ${m})`).matches);
+  const ehIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const ehAndroid = () => /android/i.test(navigator.userAgent);
+  const atualizarInstalar = () => $$("[data-instalar]").forEach((b) => { b.hidden = instalado(); });
+  window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); pedidoInstalacao = e; atualizarInstalar(); });
+  window.addEventListener("appinstalled", () => { pedidoInstalacao = null; acabouDeInstalar = true; atualizarInstalar(); toast("App instalado. Procure o ícone do CMV Certo na tela inicial."); });
+  matchMedia("(display-mode: standalone)").addEventListener?.("change", atualizarInstalar);
+
+  async function instalarApp() {
+    if (pedidoInstalacao) {
+      const p = pedidoInstalacao;
+      pedidoInstalacao = null; // o aviso só pode ser usado uma vez
+      try {
+        p.prompt();
+        const { outcome } = await p.userChoice;
+        if (outcome === "accepted") { acabouDeInstalar = true; atualizarInstalar(); }
+      } catch (e) { passoAPassoInstalar(); }
+      return;
+    }
+    passoAPassoInstalar();
+  }
+  function passoAPassoInstalar() {
+    const passo = (n, ic, txt) => `<li><span class="ip-n">${n}</span><span class="ip-ic">${icon(ic)}</span><span class="ip-t">${txt}</span></li>`;
+    let titulo, passos, nota = "";
+    if (ehIOS()) {
+      titulo = "Instale no iPhone em 3 toques";
+      passos = passo(1, "shareIos", "Toque em <b>Compartilhar</b>, na barra do Safari.") +
+        passo(2, "plusSquare", "Role a lista e toque em <b>Adicionar à Tela de Início</b>.") +
+        passo(3, "check", "Toque em <b>Adicionar</b>. O ícone do CMV Certo aparece na tela inicial.");
+      nota = "Abriu o link pelo Instagram ou WhatsApp? Toque em <b>⋯</b> e escolha <b>Abrir no Safari</b> antes.";
+    } else if (ehAndroid()) {
+      titulo = "Instale no Android";
+      passos = passo(1, "kebab", "No Chrome, toque no menu <b>⋮</b>, no canto de cima.") +
+        passo(2, "install", "Toque em <b>Instalar app</b> ou <b>Adicionar à tela inicial</b>.") +
+        passo(3, "check", "Confirme em <b>Instalar</b>. O ícone do CMV Certo aparece na tela inicial.");
+      nota = "Abriu o link pelo Instagram ou WhatsApp? Toque em <b>⋮</b> e escolha <b>Abrir no Chrome</b> antes.";
+    } else {
+      titulo = "Instale no computador";
+      passos = passo(1, "install", "No Chrome ou no Edge, clique no ícone de <b>instalar</b>, no fim da barra de endereço.") +
+        passo(2, "check", "Clique em <b>Instalar</b>. O CMV Certo abre numa janela própria, como um programa.") +
+        passo(3, "plusSquare", "No Safari do Mac: menu <b>Arquivo</b> › <b>Adicionar ao Dock</b>.");
+      nota = "No Firefox não dá para instalar. Abra o link no Chrome, no Edge ou no Safari.";
+    }
+    const m = overlay(`<div class="modal instalar-modal" role="dialog" aria-modal="true" aria-label="Instalar o app"><div class="sheet-grab"></div>
+      <div class="ip-head"><span class="brand-mark">${logo()}</span><div><h2>${titulo}</h2><p class="muted small" style="margin:0">Ícone na tela inicial, tela cheia e abre mais rápido. Seus dados continuam os mesmos.</p></div></div>
+      <ol class="ip-passos">${passos}</ol>
+      ${nota ? `<p class="ip-nota small">${nota}</p>` : ""}
+      <div class="row" style="justify-content:flex-end"><button class="btn primary" id="ipOk">Entendi</button></div>
+    </div>`, { center: true });
+    $("#ipOk", m.root).onclick = m.close;
+  }
+  // Botão reaproveitado na página de acesso, no menu lateral e no menu "Mais".
+  const botaoInstalar = (tipo) => tipo === "nav"
+    ? `<button class="nav-item" data-instalar ${instalado() ? "hidden" : ""}>${ico("install", "c-fic")}Instalar o app</button>`
+    : `<button class="btn instalar-btn" type="button" data-instalar ${instalado() ? "hidden" : ""}>${icon("install")}Instalar o app</button>`;
+  // Liga os botões recém-desenhados dentro de um elemento.
+  const ligarInstalar = (raiz, depois) => $$("[data-instalar]", raiz).forEach((b) => b.addEventListener("click", () => { if (depois) depois(); instalarApp(); }));
+
   const credito = () => `<a class="credit" href="https://www.instagram.com/domcreator_/" target="_blank" rel="noopener" aria-label="Projeto desenvolvido por DOM. Abrir o Instagram @domcreator_">Projeto desenvolvido por <b>DOM</b><span class="credit-at">@domcreator_</span></a>`;
 
   // Fotos das fichas: escolhidas pela categoria ou pelo nome da receita.
@@ -205,9 +270,10 @@
         </div>
       </aside>
       <main class="auth-side"><div class="auth-box">${forms[modo]}</div>${planos}
-        <p class="auth-foot">Funciona no celular e no computador · Instale como app</p>
+        <div class="auth-foot auth-install"><span>Funciona no celular e no computador.</span>${botaoInstalar()}</div>
         <div class="credit-wrap auth-credit">${credito()}</div></main>
     </div>`;
+    ligarInstalar(app);
     // Revezamento das fichas de exemplo. Para sozinho ao sair da tela de acesso e não roda para quem prefere menos movimento.
     clearInterval(timerExemplo);
     if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
@@ -318,9 +384,11 @@
         ${meter("Insumos", me.uso.insumos, lim.insumos)}
         ${meter("Fichas", me.uso.receitas, lim.receitas)}
         ${!isPro() ? (ofertaAtiva() ? `<button class="btn accent" data-href="#plano">${icon("gift")}Pro por R$ ${fmt(precoOferta(), 2)} no 1º mês</button>` : `<button class="btn primary" data-href="#plano">Assinar Pro · R$ ${fmt(me.preco, 2)}/mês</button>`) : me.diasRestantes <= 7 ? `<button class="btn" data-href="#plano">Pro vence em ${me.diasRestantes} dia(s)</button>` : ""}
+        ${botaoInstalar("nav")}
         <button class="nav-item" id="sair">${ico("logout", "c-usr")}Sair</button>
       </div>`;
     $$("[data-href]", side).forEach((b) => b.addEventListener("click", () => { location.hash = b.dataset.href; toggleSide(false); }));
+    ligarInstalar(side, () => toggleSide(false));
     $("#sair").onclick = sair;
   }
   async function sair() { await api("POST", "/api/auth/logout").catch(() => {}); S.me = null; document.body.classList.remove("app-mobile"); history.replaceState(null, "", "/"); renderAuth("login"); }
@@ -348,9 +416,11 @@
         ${NAV.slice(3).map((n) => navItem(n, extraNav(n[0]))).join("")}
         ${me.role === "admin" ? `<a class="nav-item" href="/admin">${ico("shield", "c-usr")}Painel admin</a>` : ""}
         <a class="nav-item" href="${linkSuporte("ajuda")}" target="_blank" rel="noopener">${ico("chat", "c-fic")}Falar com o suporte</a>
+        ${botaoInstalar("nav")}
         <button class="nav-item" id="sairM">${ico("logout", "c-usr")}Sair</button>
       </div></div>`, { center: true });
     $$("[data-href]", m.root).forEach((b) => b.addEventListener("click", () => { m.close(); location.hash = b.dataset.href; }));
+    ligarInstalar(m.root, () => m.close());
     $("#sairM", m.root).onclick = () => { m.close(); sair(); };
   }
   // Botão flutuante "+" do celular (cada tela define a ação).

@@ -682,3 +682,22 @@ table.db tr.locked .title-cell svg { color: var(--red); }
   .credit-wrap { padding-bottom: calc(110px + var(--tabbar-h)); }
   .auth-credit { padding-bottom: 0; }
 }
+
+/* ---------- instalar como app ---------- */
+.auth-install { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.instalar-btn { min-height: 40px; border-radius: 999px; padding: 6px 16px; font-size: 14px; color: var(--brand); border-color: color-mix(in srgb, var(--brand) 35%, var(--line)); background: var(--brand-soft); box-shadow: none; }
+.instalar-btn:hover { background: color-mix(in srgb, var(--brand-soft) 70%, var(--brand) 12%); }
+.instalar-btn svg { width: 17px; height: 17px; }
+.instalar-modal { width: min(440px, 100%); }
+.ip-head { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 14px; }
+.ip-head .brand-mark { width: 44px; height: 44px; border-radius: 12px; }
+.ip-head .brand-mark .logo-svg { width: 28px; height: 28px; }
+.ip-head h2 { margin: 0 0 4px; }
+.ip-passos { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.ip-passos li { display: flex; align-items: center; gap: 12px; padding: 12px; background: var(--surface-2); border-radius: 12px; font-size: 15px; line-height: 1.4; }
+.ip-n { width: 24px; height: 24px; border-radius: 50%; background: var(--brand); color: var(--brand-ink); font-family: var(--font-mono); font-weight: 600; font-size: 13px; display: grid; place-items: center; flex: none; }
+.ip-ic { width: 36px; height: 36px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); color: var(--blue); display: grid; place-items: center; flex: none; }
+.ip-ic svg { width: 20px; height: 20px; }
+.ip-t { min-width: 0; text-wrap: pretty; }
+.ip-t b { color: var(--text); }
+.ip-nota { margin: 0 0 14px; padding: 10px 12px; border-radius: 10px; background: var(--yellow-soft); color: var(--yellow-ink); text-wrap: pretty; }
