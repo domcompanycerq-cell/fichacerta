@@ -38,7 +38,16 @@ Os limites valem no servidor. Se o Pro vence (ou o admin volta a conta ao Free),
 - Notificações em massa (app, e-mail e links de WhatsApp prontos).
 - Lembretes automáticos de renovação: 7 dias antes, 1 dia antes e no vencimento (tarefa diária da Vercel).
 
-**Pagamento:** não há pagamento online. "Assinar" e "Renovar" abrem o WhatsApp do suporte (`SUPORTE_WHATSAPP`) com a mensagem pronta e o e-mail do usuário. Depois de confirmar o pagamento, o admin escolhe o período no painel e clica em **Concluir liberação**.
+**Pagamento:** com `ASAAS_API_KEY` configurada, o usuário assina pelo app (Pix na própria tela ou cartão na página segura do Asaas):
+- **Mensal:** 1º período em cobrança avulsa (R$ 10 da oferta, uma vez por conta, ou R$ 25). Quando é pago, o app cria a assinatura de R$ 25/mês no Asaas com a 1ª renovação no fim do período. Cada renovação paga soma um mês. Sem fidelidade: o usuário cancela a renovação em Plano e assinatura e o Pro segue até o fim do período pago.
+- **Anual:** R$ 199 à vista (`PRO_PRICE_ANUAL`), 12 meses, não renova sozinho e não soma com a oferta.
+- **Liberação automática:** o Asaas chama `POST /api/webhooks/asaas` (só aceito com o `asaas-access-token` igual a `ASAAS_WEBHOOK_TOKEN`); o app relê a cobrança na API do Asaas antes de liberar e nunca libera duas vezes a mesma cobrança. O botão "Já paguei" e a própria tela de pagamento também conferem a cobrança.
+- **Tolerância:** com renovação automática, a conta fica Pro por mais 3 dias depois do vencimento enquanto a cobrança está em aberto.
+- **Estorno ou contestação:** o pagamento aparece como estornado no painel e no Registro de ações; o Pro não é retirado sozinho.
+
+Sem a chave, "Assinar" e "Renovar" abrem o WhatsApp do suporte (`SUPORTE_WHATSAPP`) com a mensagem pronta e o e-mail do usuário, e o admin libera no painel (escolhe o período e clica em **Concluir liberação**). A liberação manual continua no painel como reserva mesmo com o Asaas ligado.
+
+**Como ligar o Asaas:** (1) crie a conta e gere a chave de API do sandbox; (2) na Vercel, cadastre `ASAAS_API_KEY`, `ASAAS_AMBIENTE=sandbox` e `ASAAS_WEBHOOK_TOKEN`; (3) no painel do Asaas, crie o webhook de cobranças apontando para `https://SEU-DOMINIO/api/webhooks/asaas` com o mesmo token; (4) publique, teste e, quando estiver tudo certo, troque para a chave de produção e `ASAAS_AMBIENTE=producao`.
 
 ## Estrutura
 

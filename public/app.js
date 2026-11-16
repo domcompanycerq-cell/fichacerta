@@ -23,6 +23,7 @@
         ? `Olá! Quero assinar o plano Pro do ${nome} com a oferta de R$ ${fmt(precoOferta(), 2)} nos primeiros ${S.cfg.diasOferta || 30} dias.`
         : `Olá! Quero assinar o plano Pro do ${nome} (R$ ${fmt(S.cfg.preco || 25, 2)}/mês).`,
       renovar: `Olá! Quero renovar meu plano Pro do ${nome}.`,
+      anual: `Olá! Quero o plano anual do ${nome} (R$ ${fmt(precoAnual(), 2)} à vista, 12 meses de Pro).`,
       ajuda: `Olá! Preciso de ajuda com o ${nome}.`,
     };
     let msg = textos[motivo] || textos.ajuda;
@@ -33,12 +34,19 @@
   // Limites do Free vêm do servidor (/api/config); o padrão só vale se a configuração não carregar.
   const limFree = () => S.cfg.limitesFree || { insumos: 25, receitas: 3 };
   const ofertaAtiva = () => !S.me || !!(S.me.oferta && S.me.oferta.disponivel);
+  // Pagamento pelo app (Asaas). Desligado, a assinatura continua pelo WhatsApp do suporte.
+  const online = () => !!S.cfg.pagamentoOnline;
+  const precoAnual = () => S.cfg.precoAnual || (S.me && S.me.precoAnual) || 199;
+  // Botão de assinar: abre o pagamento no app quando ligado; senão, o WhatsApp com a mensagem pronta.
+  const botaoAssinar = (plano, rotulo, cls = "primary", extra = "") => online()
+    ? `<button type="button" class="btn ${cls}" data-checkout="${plano}" ${extra}>${icon("card")}${rotulo}</button>`
+    : `<a class="btn ${cls}" data-assinar href="${linkSuporte(plano === "anual" ? "anual" : motivoPro())}" target="_blank" rel="noopener" ${extra}>${icon("chat")}${rotulo}</a>`;
   const precoOferta = () => (S.me && S.me.oferta ? S.me.oferta.preco : S.cfg.precoOferta) || 10;
   function ofertaBanner() {
     if (!S.me || !ofertaAtiva() || isPro()) return "";
     return `<div class="offer">${'<span class="o-ico">'}${icon("gift")}</span>
-      <div class="o-txt"><b>Oferta de boas-vindas: Pro por R$&nbsp;${fmt(precoOferta(), 2)} no primeiro mês</b><span>Insumos e fichas sem limite e histórico de preços. Depois, R$ ${fmt(S.me.preco, 2)}/mês.</span></div>
-      <a class="btn" data-assinar href="${linkSuporte("assinar")}" target="_blank" rel="noopener">${icon("chat")}Quero a oferta</a></div>`;
+      <div class="o-txt"><b>Oferta de boas-vindas: Pro por R$&nbsp;${fmt(precoOferta(), 2)} no primeiro mês</b><span>Insumos e fichas sem limite e histórico de preços. Depois, R$ ${fmt(S.me.preco, 2)}/mês, ou R$ ${fmt(precoAnual(), 2)} no plano anual.</span></div>
+      ${botaoAssinar("mensal", "Quero a oferta", "")}</div>`;
   }
   const telSuporte = () => { const d = String(S.cfg.suporteWhatsApp || "5515988305442"); return `+${d.slice(0, 2)} (${d.slice(2, 4)}) ${d.slice(4, -4)}-${d.slice(-4)}`; };
   const motivoPro = () => (S.me && (S.me.plano === "pro" || S.me.vencido) ? "renovar" : "assinar");
@@ -53,6 +61,13 @@
     return !!o;
   }
   const lerOrigem = () => { try { return localStorage.getItem(CHAVE_ORIGEM) || ""; } catch (e) { return ""; } };
+  // Botões "Assinar" com pagamento pelo app.
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-checkout]");
+    if (!b || !S.me) return;
+    e.preventDefault();
+    abrirCheckout(b.dataset.checkout === "anual" ? "anual" : "mensal");
+  });
   // Clique em Assinar/Renovar: abre o WhatsApp e avisa o servidor (marco do funil).
   document.addEventListener("click", (e) => {
     if (!S.me || !e.target.closest("a[data-assinar]")) return;
@@ -462,8 +477,8 @@
       <p class="muted" style="margin:0 0 14px">${esc(msg)}</p>
       <div class="plan ${ofertaAtiva() ? "featured" : ""}" style="margin:${ofertaAtiva() ? "18px" : "0"} 0 14px">${ofertaAtiva() ? `<span class="ribbon">Oferta de boas-vindas</span><div class="price"><s>R$ ${fmt(S.me.preco, 2)}</s>R$ ${fmt(precoOferta(), 2)} <small>no 1º mês</small></div><span class="small muted">Depois, R$ ${fmt(S.me.preco, 2)}/mês.</span>` : `<div class="price">R$ ${fmt(S.me.preco, 2)} <small>/ mês</small></div>`}
         <ul><li>${icon("check")}Insumos e fichas técnicas ilimitados</li><li>${icon("check")}Histórico de preços de cada insumo</li><li>${icon("check")}Seus dados continuam salvos se o plano vencer</li></ul></div>
-      <div class="row" style="justify-content:flex-end"><button class="btn ghost" id="mc">Agora não</button><a class="btn ${ofertaAtiva() ? "accent" : "primary"}" id="mg" data-assinar href="${linkSuporte(motivoPro())}" target="_blank" rel="noopener">${icon("chat")}${ofertaAtiva() ? "Quero a oferta" : "Assinar pelo WhatsApp"}</a></div>
-      <p class="small faint" style="margin:10px 0 0;text-align:right">O pagamento é feito com o suporte: ${esc(telSuporte())}</p>
+      <div class="row" style="justify-content:flex-end"><button class="btn ghost" id="mc">Agora não</button>${botaoAssinar("mensal", ofertaAtiva() ? "Quero a oferta" : online() ? "Assinar o Pro" : "Assinar pelo WhatsApp", ofertaAtiva() ? "accent" : "primary", 'id="mg"')}</div>
+      <p class="small faint" style="margin:10px 0 0;text-align:right">${online() ? `Pix ou cartão, direto no app. Ou R$ ${fmt(precoAnual(), 2)} no plano anual.` : `O pagamento é feito com o suporte: ${esc(telSuporte())}`}</p>
     </div>`, { center: true });
     $("#mc", m.root).onclick = m.close;
     $("#mg", m.root).addEventListener("click", m.close);
@@ -964,30 +979,148 @@
   async function viewPlano() {
     crumb("Plano e assinatura");
     const me = S.me;
-    const estado = isPro()
-      ? `<div class="callout ${me.diasRestantes <= 7 ? "yellow" : "blue"}">${icon("info")}<div class="ct">Seu plano <b>Pro</b> está ativo até <b>${dataBR(me.proAte)}</b> (${me.diasRestantes} dia${me.diasRestantes === 1 ? "" : "s"}). ${me.diasRestantes <= 7 ? "Renove para não perder o acesso ilimitado." : "Você pode renovar antes: os dias são somados."}</div></div>`
-      : me.vencido
-        ? `<div class="callout red">${icon("info")}<div class="ct">Seu plano Pro venceu em ${dataBR(me.proAte)}. Seus insumos e fichas continuam salvos; renove para voltar a cadastrar sem limite e ver o histórico.</div></div>`
-        : "";
+    const anual = isPro() && me.planoTipo === "anual";
+    const automatica = isPro() && me.assinaturaOnline;
+    let estado = "";
+    if (automatica && me.emTolerancia) estado = `<div class="callout yellow">${icon("info")}<div class="ct">A renovação de <b>R$ ${fmt(me.preco, 2)}</b> venceu em ${dataBR(me.proAte)} e ainda está em aberto. Você continua com o Pro por alguns dias: pague a cobrança abaixo para não voltar ao Free.</div></div>`;
+    else if (automatica) estado = `<div class="callout blue">${icon("info")}<div class="ct">Sua <b>assinatura mensal</b> está ativa. A próxima cobrança, de <b>R$ ${fmt(me.preco, 2)}</b>, vence em <b>${dataBR(me.proAte)}</b> e chega no seu e-mail. Sem fidelidade.</div></div>`;
+    else if (isPro()) estado = `<div class="callout ${me.diasRestantes <= 7 ? "yellow" : "blue"}">${icon("info")}<div class="ct">Seu plano <b>Pro${anual ? " anual" : ""}</b> está ativo até <b>${dataBR(me.proAte)}</b> (${me.diasRestantes} dia${me.diasRestantes === 1 ? "" : "s"}). ${me.diasRestantes <= 7 ? "Renove para não perder o acesso ilimitado." : "Você pode renovar antes: os dias são somados."}</div></div>`;
+    else if (me.vencido) estado = `<div class="callout red">${icon("info")}<div class="ct">Seu plano Pro venceu em ${dataBR(me.proAte)}. Seus insumos e fichas continuam salvos; renove para voltar a cadastrar sem limite e ver o histórico.</div></div>`;
+
+    const renovando = isPro() || me.vencido;
+    const btnMensal = automatica ? `<button class="btn block" disabled>${icon("check")}Assinatura ativa</button>`
+      : botaoAssinar("mensal", ofertaAtiva() ? `Assinar por R$ ${fmt(precoOferta(), 2)}` : renovando ? `${online() ? "Renovar" : "Renovar pelo WhatsApp"} por R$ ${fmt(me.preco, 2)}` : `Assinar por R$ ${fmt(me.preco, 2)}/mês`, `${ofertaAtiva() ? "accent" : "primary"} block`);
+    const btnAnual = botaoAssinar("anual", anual ? `Renovar o anual por R$ ${fmt(precoAnual(), 2)}` : `${online() ? "Assinar" : "Quero"} o anual por R$ ${fmt(precoAnual(), 2)}`, "primary block");
+    const mensalAnual = me.preco * 12, economia = mensalAnual - precoAnual();
     $("#view").innerHTML = `<div class="page">${pageHead("card", "Plano e assinatura", "")}${estado}
-      <div class="plans">
+      <div class="plans plans-3">
         <div class="plan ${!isPro() ? "current" : ""}"><div class="row" style="justify-content:space-between"><b>Free</b>${!isPro() ? '<span class="tag green">Seu plano</span>' : ""}</div>
           <div class="price">R$ 0</div>
           <ul><li>${icon("check")}Até ${limFree().insumos} insumos</li><li>${icon("check")}Até ${limFree().receitas} fichas técnicas</li><li>${icon("check")}Recálculo automático das fichas</li><li class="no">${icon("minus")}Histórico de preços</li></ul></div>
-        <div class="plan ${isPro() ? "current" : ofertaAtiva() ? "featured" : ""}">${!isPro() && ofertaAtiva() ? '<span class="ribbon">Oferta de boas-vindas</span>' : ""}<div class="row" style="justify-content:space-between"><b>Pro</b>${isPro() ? '<span class="tag green">Seu plano</span>' : ""}</div>
-          ${!isPro() && ofertaAtiva() ? `<div class="price"><s>R$ ${fmt(me.preco, 2)}</s>R$ ${fmt(precoOferta(), 2)} <small>nos primeiros ${me.oferta.dias} dias</small></div><span class="small muted" style="margin-top:-6px">Depois, R$ ${fmt(me.preco, 2)}/mês. Só para a primeira assinatura.</span>` : `<div class="price">R$ ${fmt(me.preco, 2)} <small>/ mês</small></div>`}
+        <div class="plan ${isPro() && !anual ? "current" : ofertaAtiva() ? "featured" : ""}">${!isPro() && ofertaAtiva() ? '<span class="ribbon">Oferta de boas-vindas</span>' : ""}<div class="row" style="justify-content:space-between"><b>Pro mensal</b>${isPro() && !anual ? '<span class="tag green">Seu plano</span>' : ""}</div>
+          ${!isPro() && ofertaAtiva() ? `<div class="price"><s>R$ ${fmt(me.preco, 2)}</s>R$ ${fmt(precoOferta(), 2)} <small>no 1º mês</small></div><span class="small muted" style="margin-top:-6px">Depois, R$ ${fmt(me.preco, 2)}/mês. Sem fidelidade.</span>` : `<div class="price">R$ ${fmt(me.preco, 2)} <small>/ mês</small></div><span class="small muted" style="margin-top:-6px">Sem fidelidade.</span>`}
           <ul><li>${icon("check")}Insumos ilimitados</li><li>${icon("check")}Fichas técnicas ilimitadas</li><li>${icon("check")}Recálculo automático das fichas</li><li>${icon("check")}Histórico de preços dos insumos</li></ul>
-          <a class="btn ${!isPro() && ofertaAtiva() ? "accent" : "primary"} block" data-assinar href="${linkSuporte(motivoPro())}" target="_blank" rel="noopener">${icon("chat")}${isPro() || me.vencido ? "Renovar pelo WhatsApp" : ofertaAtiva() ? `Assinar por R$ ${fmt(precoOferta(), 2)} pelo WhatsApp` : "Assinar pelo WhatsApp"}</a>
-          <span class="small faint">O pagamento é combinado com o suporte no WhatsApp ${esc(telSuporte())}. Assim que for confirmado, o Pro é liberado na sua conta por 30 dias.</span></div>
+          ${btnMensal}
+          ${automatica ? `<button class="btn ghost danger block" id="cancelar">Cancelar renovação automática</button>` : ""}</div>
+        <div class="plan ${anual ? "current" : ""}"><span class="ribbon ribbon-green">Economize R$ ${fmt(economia, 0)}</span><div class="row" style="justify-content:space-between"><b>Pro anual</b>${anual ? '<span class="tag green">Seu plano</span>' : ""}</div>
+          <div class="price">R$ ${fmt(precoAnual(), 2)} <small>/ ano</small></div><span class="small muted" style="margin-top:-6px">≈ R$ ${fmt(precoAnual() / 12, 2)} por mês, à vista. Não renova sozinho.</span>
+          <ul><li>${icon("check")}Tudo do Pro por 12 meses</li><li>${icon("check")}Pagamento único</li><li>${icon("check")}Não vale junto com a oferta do 1º mês</li></ul>
+          ${btnAnual}</div>
       </div>
-      <div class="callout">${icon("info")}<div class="ct small">Ao abrir o WhatsApp, a mensagem já vai com o seu e-mail de cadastro (${esc(me.email)}) para o suporte localizar sua conta.</div></div>
+      ${online()
+        ? `<div class="callout">${icon("info")}<div class="ct small">Pagamento por <b>Pix</b> ou <b>cartão de crédito</b>, processado pelo Asaas. O Pro é liberado sozinho assim que o pagamento é confirmado. Prefere falar com alguém? <a href="${linkSuporte("ajuda")}" target="_blank" rel="noopener">Chame o suporte no WhatsApp</a>.</div></div>`
+        : `<div class="callout">${icon("info")}<div class="ct small">O pagamento é combinado com o suporte no WhatsApp ${esc(telSuporte())}. Ao abrir o WhatsApp, a mensagem já vai com o seu e-mail de cadastro (${esc(me.email)}) para o suporte localizar sua conta.</div></div>`}
       <div class="h2">Pagamentos</div><div id="pl"><div class="empty">Carregando…</div></div></div>`;
+    const c = $("#cancelar");
+    if (c) armar(c, "Confirmar: cancelar a renovação", async () => {
+      try { const r = await api("POST", "/api/assinatura/cancelar"); S.me = r.user; toast("Renovação cancelada. Seu Pro continua até o fim do período pago."); renderSidebar(); viewPlano(); }
+      catch (e) { tratarErro(e); }
+    });
     try {
       const r = await api("GET", "/api/assinatura");
-      $("#pl").innerHTML = r.pagamentos.length ? `<div class="table-wrap"><table class="db" style="min-width:0"><thead><tr><th>Data</th><th class="r">Valor</th><th>Período</th><th>Situação</th></tr></thead><tbody>
-        ${r.pagamentos.map((p) => `<tr><td class="num">${dataBR(p.aprovadoEm || p.criadoEm)}</td><td class="r num">${brl(p.valor)}</td><td>${p.dias} dias</td><td><span class="tag green">Confirmado</span></td></tr>`).join("")}
+      const rotuloTipo = (p) => (p.tipo === "anual" ? "Anual" : p.tipo === "mensal1" ? "1º mês" : p.tipo === "mensal" ? "Mensal" : `${p.dias} dias`);
+      const situacao = { aprovado: ["green", "Confirmado"], manual: ["green", "Confirmado"], pendente: ["yellow", "Aguardando"], vencido: ["red", "Vencido"], cancelado: ["", "Cancelado"], estornado: ["red", "Estornado"] };
+      $("#pl").innerHTML = r.pagamentos.length ? `<div class="table-wrap"><table class="db" style="min-width:0"><thead><tr><th>Data</th><th class="r">Valor</th><th>Plano</th><th>Forma</th><th>Situação</th></tr></thead><tbody>
+        ${r.pagamentos.map((p) => { const [cor, txt] = situacao[p.status] || ["", p.status]; return `<tr><td class="num">${dataBR(p.aprovadoEm || p.criadoEm)}</td><td class="r num">${brl(p.valor)}</td><td>${rotuloTipo(p)}</td><td>${p.forma === "pix" ? "Pix" : p.forma === "cartao" ? "Cartão" : "WhatsApp"}</td>
+          <td><span class="tag ${cor}">${txt}</span>${(p.status === "pendente" || p.status === "vencido") && p.link ? ` <a href="${esc(p.link)}" target="_blank" rel="noopener" class="small">Pagar</a>` : ""}</td></tr>`; }).join("")}
         </tbody></table></div>` : `<div class="empty">Nenhum pagamento ainda.</div>`;
     } catch (e) { tratarErro(e); }
+  }
+
+  /* ================= pagamento pelo app (Asaas) ================= */
+  const mascaraDoc = (v) => {
+    const d = v.replace(/\D/g, "").slice(0, 14);
+    if (d.length <= 11) return d.replace(/(\d{3})(\d)/, "$1.$2").replace(/(\d{3})\.(\d{3})(\d)/, "$1.$2.$3").replace(/(\d{3})\.(\d{3})\.(\d{3})(\d)/, "$1.$2.$3-$4");
+    return d.replace(/(\d{2})(\d)/, "$1.$2").replace(/(\d{2})\.(\d{3})(\d)/, "$1.$2.$3").replace(/\.(\d{3})(\d)/, ".$1/$2").replace(/(\d{4})(\d)/, "$1-$2");
+  };
+  function abrirCheckout(plano) {
+    if (!online()) { window.open(linkSuporte(plano === "anual" ? "anual" : motivoPro()), "_blank", "noopener"); return; }
+    if (plano === "mensal" && S.me.assinaturaOnline) { location.hash = "#plano"; return; }
+    const anual = plano === "anual";
+    const valor = anual ? precoAnual() : ofertaAtiva() ? precoOferta() : S.me.preco;
+    const resumo = anual ? `R$ ${fmt(valor, 2)} à vista, 12 meses de Pro. Não renova sozinho.`
+      : ofertaAtiva() ? `R$ ${fmt(valor, 2)} agora pelo 1º mês. Depois, R$ ${fmt(S.me.preco, 2)}/mês, cobrados todo mês. Cancele quando quiser.`
+      : `R$ ${fmt(valor, 2)} por mês, cobrados todo mês. Cancele quando quiser.`;
+    let timer = null, ticks = 0, pagamento = null;
+    const proAntes = S.me.plano === "pro" ? S.me.proAte : null;
+    const m = overlay(`<div class="modal checkout" role="dialog" aria-modal="true" aria-label="Pagamento"><div class="sheet-grab"></div><div id="ck"></div></div>`, { center: true, onClose: () => clearInterval(timer) });
+    const box = $("#ck", m.root);
+    const passo1 = () => {
+      box.innerHTML = `<h2>${anual ? "Pro anual" : "Pro mensal"}</h2>
+        <div class="ck-valor"><b class="num">R$ ${fmt(valor, 2)}</b><span>${esc(resumo)}</span></div>
+        <form id="ckf" novalidate style="display:flex;flex-direction:column;gap:10px">
+          <div class="field"><span class="small muted" style="font-weight:600">Forma de pagamento</span>
+            <div class="seg" role="radiogroup" aria-label="Forma de pagamento">
+              <label><input type="radio" name="forma" value="pix" checked><span>${icon("bolt")}Pix</span></label>
+              <label><input type="radio" name="forma" value="cartao"><span>${icon("card")}Cartão de crédito</span></label>
+            </div></div>
+          <div class="field"><label for="ckNome">Nome na cobrança</label><input class="input" id="ckNome" autocomplete="name" value="${esc(S.me.nome)}"></div>
+          <div class="field"><label for="ckDoc">CPF ou CNPJ</label><input class="input" id="ckDoc" inputmode="numeric" autocomplete="off" placeholder="000.000.000-00"></div>
+          <div class="err" id="ckErr"></div>
+          <button class="btn ${anual ? "primary" : "accent"} block" type="submit" id="ckGo">Gerar Pix</button>
+          <p class="small faint" style="margin:0">O pagamento é processado pelo Asaas. O CMV Certo não guarda o seu CPF nem os dados do cartão.</p>
+        </form>`;
+      const doc = $("#ckDoc", box); doc.addEventListener("input", () => { doc.value = mascaraDoc(doc.value); });
+      $$("input[name=forma]", box).forEach((r) => r.addEventListener("change", () => { $("#ckGo", box).textContent = r.value === "pix" && r.checked ? "Gerar Pix" : "Continuar para o cartão"; }));
+      setTimeout(() => doc.focus(), 60);
+      $("#ckf", box).addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const btn = $("#ckGo", box); btn.disabled = true; $("#ckErr", box).textContent = "";
+        const forma = $("input[name=forma]:checked", box).value;
+        try {
+          const r = await api("POST", "/api/assinatura/checkout", { plano, forma, nome: $("#ckNome", box).value, cpfCnpj: doc.value });
+          pagamento = r.pagamento;
+          passo2(forma, r);
+        } catch (ex) { $("#ckErr", box).textContent = ex.message; btn.disabled = false; }
+      });
+    };
+    const aguardando = `<div class="ck-status" id="ckSt"><span class="spin" aria-hidden="true"></span>Aguardando a confirmação do pagamento…</div>
+      <div class="row" style="justify-content:space-between"><button type="button" class="btn ghost" id="ckVoltar">Voltar</button><button type="button" class="btn" id="ckJa">Já paguei</button></div>`;
+    const passo2 = (forma, r) => {
+      if (forma === "pix") {
+        box.innerHTML = `<h2>Pague com Pix</h2>
+          <p class="small muted" style="margin:0 0 10px">Abra o app do seu banco, escolha Pix e leia o QR code ou use o código copia e cola. Valor: <b>R$ ${fmt(r.pagamento.valor, 2)}</b>.</p>
+          <div class="pix-qr"><img src="data:image/png;base64,${r.pix.imagem}" alt="QR code do Pix" width="220" height="220"></div>
+          <label class="small muted" for="ckPix" style="font-weight:600">Pix copia e cola</label>
+          <textarea class="input pix-code" id="ckPix" rows="3" readonly>${esc(r.pix.copiaECola)}</textarea>
+          <button type="button" class="btn primary block" id="ckCopiar" style="margin:8px 0 12px">${icon("copy")}Copiar código Pix</button>
+          ${aguardando}`;
+        $("#ckCopiar", box).onclick = async () => {
+          const t = $("#ckPix", box);
+          try { await navigator.clipboard.writeText(t.value); toast("Código Pix copiado."); } catch (e) { t.select(); toast("Selecione o código e copie."); }
+        };
+      } else {
+        box.innerHTML = `<h2>Pague com cartão</h2>
+          <p class="small muted" style="margin:0 0 12px">A página segura do Asaas abre numa nova aba. Preencha o cartão por lá e volte para cá: o Pro é liberado sozinho quando o pagamento for aprovado.</p>
+          <a class="btn accent block" href="${esc(r.pagamento.link)}" target="_blank" rel="noopener" style="margin-bottom:12px">${icon("card")}Abrir a página de pagamento (R$ ${fmt(r.pagamento.valor, 2)})</a>
+          ${aguardando}`;
+      }
+      $("#ckVoltar", box).onclick = () => { clearInterval(timer); passo1(); };
+      $("#ckJa", box).onclick = () => conferir(true);
+      clearInterval(timer); ticks = 0;
+      timer = setInterval(() => { ticks++; if (ticks % 4 === 0) conferir(false); else verificar(); }, 4000);
+    };
+    // Liberado quando o Pro aparece (ou a validade aumenta, no caso de renovação).
+    const liberado = (u) => u.plano === "pro" && u.proAte !== proAntes;
+    async function verificar() {
+      try { const r = await api("GET", "/api/me"); if (liberado(r.user)) concluir(r.user); } catch (e) { /* tenta de novo no próximo ciclo */ }
+    }
+    async function conferir(manual) {
+      if (!pagamento) return;
+      try {
+        const r = await api("POST", `/api/assinatura/conferir/${encodeURIComponent(pagamento.asaasId)}`);
+        if (liberado(r.user)) return concluir(r.user);
+        if (manual) { const st = $("#ckSt", box); if (st) st.innerHTML = `<span class="spin" aria-hidden="true"></span>Ainda não recebemos a confirmação. Pix costuma cair em segundos; cartão, em até alguns minutos.`; }
+      } catch (e) { if (manual) toast(esc(e.message)); }
+    }
+    function concluir(u) {
+      clearInterval(timer);
+      S.me = u;
+      box.innerHTML = `<div class="ck-ok">${icon("check")}<h2>Pagamento confirmado</h2><p>Seu plano <b>Pro</b> está ativo até <b>${dataBR(u.proAte)}</b>. Insumos e fichas sem limite e histórico de preços liberados.</p>
+        <button type="button" class="btn primary block" id="ckFim">Começar a usar</button></div>`;
+      $("#ckFim", box).onclick = () => { m.close(); renderSidebar(); route(); };
+    }
+    passo1();
   }
 
   /* ================= conta ================= */

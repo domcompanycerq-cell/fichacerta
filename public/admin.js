@@ -92,7 +92,7 @@
   const falha = (e) => { if (e.status === 401 || e.status === 403) return boot(); toast(esc(e.message)); };
 
   function planoTag(u) {
-    if (u.plano === "pro") return `<span class="tag green">Pro</span>`;
+    if (u.plano === "pro") return `<span class="tag green">Pro${u.planoTipo === "anual" ? " anual" : ""}</span>${u.assinaturaOnline ? ' <span class="tag blue" title="Renova sozinho pelo Asaas">auto</span>' : ""}`;
     if (u.vencido) return `<span class="tag red">Pro vencido</span>`;
     return `<span class="tag">Free</span>`;
   }
@@ -101,6 +101,8 @@
     if (u.vencido) return `<span class="faint">venceu ${dataBR(u.proAte)}</span>`;
     return '<span class="faint">—</span>';
   }
+  const COR_PAG = { aprovado: "green", manual: "green", pendente: "yellow", vencido: "red", estornado: "red", cancelado: "" };
+  const origemPag = (x) => (x.provider === "asaas" ? `Asaas · ${x.forma === "cartao" ? "cartão" : "Pix"}` : x.provider === "whatsapp-oferta" ? "WhatsApp (oferta)" : "WhatsApp");
   const statusTag = (u) => (u.status === "bloqueado" ? `<span class="tag red">Bloqueado</span>` : `<span class="tag green">Ativo</span>`);
   const mascaraTel = (v) => {
     const d = v.replace(/\D/g, "").slice(0, 11);
@@ -124,7 +126,7 @@
       S.resumo = r;
       const conv = r.total ? (r.pro / r.total) * 100 : 0;
       $("#vg").innerHTML = `
-        <div class="callout">${icon("info")}<div class="ct small">Os usuários pagam pelo WhatsApp do suporte (+${esc(r.suporteWhatsApp)}). Depois de confirmar o pagamento, abra o usuário em <a href="#usuarios">Usuários</a>, escolha o período do Pro, confira o resumo e clique em <b>Concluir liberação</b>.${!r.emailAtivo ? "<br><b>E-mail desativado:</b> configure SMTP no .env para enviar lembretes e recuperação de senha por e-mail. As notificações dentro do app funcionam normalmente." : ""}</div></div>
+        <div class="callout">${icon("info")}<div class="ct small">${r.pagamentoOnline ? `Os usuários pagam pelo app (Pix ou cartão, pelo Asaas) e o Pro é liberado sozinho quando o pagamento confirma. A liberação manual continua aqui como reserva: abra o usuário em <a href="#usuarios">Usuários</a>, escolha o período, confira o resumo e clique em <b>Concluir liberação</b>.` : `Os usuários pagam pelo WhatsApp do suporte (+${esc(r.suporteWhatsApp)}). Depois de confirmar o pagamento, abra o usuário em <a href="#usuarios">Usuários</a>, escolha o período do Pro, confira o resumo e clique em <b>Concluir liberação</b>.`}${!r.emailAtivo ? "<br><b>E-mail desativado:</b> configure SMTP no .env para enviar lembretes e recuperação de senha por e-mail. As notificações dentro do app funcionam normalmente." : ""}</div></div>
         <div class="stats">
           <div class="stat"><span>Usuários</span><b>${r.total}</b><small>${r.novos30} novos em 30 dias</small></div>
           <div class="stat"><span>Assinantes Pro</span><b>${r.pro}</b><small>${fmt(conv, 1)}% da base</small></div>
@@ -354,7 +356,7 @@
         <div class="row"><button class="btn" id="msgRenov">${icon("send")}Lembrete de renovação</button><a class="btn ghost" target="_blank" rel="noopener" href="${wa(u, `Olá, ${u.nome.split(" ")[0]}! `)}">Abrir WhatsApp</a></div>
         <div class="err" id="pe"></div>
 
-        ${d.pagamentos.length ? `<div class="h2" style="font-size:16px">Pagamentos</div><div class="table-wrap"><table class="db" style="min-width:0"><thead><tr><th>Data</th><th class="r">Valor</th><th>Período</th><th>Origem</th><th>Situação</th></tr></thead><tbody>${d.pagamentos.map((x) => `<tr><td class="small num">${dataBR(x.aprovadoEm || x.criadoEm)}</td><td class="r num">${brl(x.valor)}</td><td>${x.dias}d</td><td class="small">${x.provider === "whatsapp-oferta" ? "WhatsApp (oferta)" : "WhatsApp"}</td><td><span class="tag ${x.status === "pendente" ? "yellow" : "green"}">${x.status}</span></td></tr>`).join("")}</tbody></table></div>` : ""}
+        ${d.pagamentos.length ? `<div class="h2" style="font-size:16px">Pagamentos</div><div class="table-wrap"><table class="db" style="min-width:0"><thead><tr><th>Data</th><th class="r">Valor</th><th>Período</th><th>Origem</th><th>Situação</th></tr></thead><tbody>${d.pagamentos.map((x) => `<tr><td class="small num">${dataBR(x.aprovadoEm || x.criadoEm)}</td><td class="r num">${brl(x.valor)}</td><td>${x.tipo === "anual" ? "anual" : x.tipo === "mensal1" ? "1º mês" : `${x.dias}d`}</td><td class="small">${origemPag(x)}</td><td><span class="tag ${COR_PAG[x.status] || ""}">${esc(x.status)}</span>${x.link ? ` <a class="small" href="${esc(x.link)}" target="_blank" rel="noopener">cobrança</a>` : ""}</td></tr>`).join("")}</tbody></table></div>` : ""}
         ${d.log.length ? `<div class="h2" style="font-size:16px">Ações do administrador</div><div class="list">${d.log.map((l) => `<div class="list-item" style="padding:6px 0"><div class="li-body"><span class="small"><b>${esc(l.acao)}</b> ${esc(l.detalhe)}</span><div class="li-meta">${dataHoraBR(l.criadoEm)}</div></div></div>`).join("")}</div>` : ""}
         ${d.notificacoes.length ? `<div class="h2" style="font-size:16px">Notificações recebidas</div><div class="list">${d.notificacoes.map((n) => `<div class="list-item" style="padding:6px 0"><span class="dot ${n.lida ? "read" : ""}"></span><div class="li-body"><span class="small">${esc(n.titulo)}</span><div class="li-meta">${dataHoraBR(n.criadoEm)} · ${n.lida ? "lida" : "não lida"}</div></div></div>`).join("")}</div>` : ""}
       </div></div>`);
@@ -476,7 +478,7 @@
     try {
       const r = await api("GET", "/api/admin/log");
       $("#lg").innerHTML = r.log.length ? `<div class="table-wrap"><table class="db" style="min-width:0"><thead><tr><th>Data</th><th>Ação</th><th>Usuário</th><th>Detalhe</th></tr></thead><tbody>
-        ${r.log.map((l) => `<tr><td class="small num">${dataHoraBR(l.criadoEm)}</td><td><span class="tag ${l.acao === "bloqueio" ? "red" : l.acao === "pro" ? "blue" : l.acao === "liberação" || l.acao === "cadastro" ? "green" : ""}">${esc(l.acao)}</span></td><td>${esc(l.usuario || "—")}</td><td class="small muted">${esc(l.detalhe)}</td></tr>`).join("")}
+        ${r.log.map((l) => `<tr><td class="small num">${dataHoraBR(l.criadoEm)}</td><td><span class="tag ${l.acao === "bloqueio" || l.acao === "estorno" || l.acao === "asaas" ? "red" : l.acao === "pro" ? "blue" : l.acao === "liberação" || l.acao === "cadastro" ? "green" : ""}">${esc(l.acao)}</span></td><td>${esc(l.usuario || "—")}</td><td class="small muted">${esc(l.detalhe)}</td></tr>`).join("")}
         </tbody></table></div>` : `<div class="empty">Nenhuma ação registrada ainda.</div>`;
     } catch (e) { falha(e); }
   }

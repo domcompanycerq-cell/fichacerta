@@ -425,3 +425,144 @@ test("limites novos do Free (25 insumos, 3 fichas): quem cabe neles é desbloque
   assert.equal(bloq.code, "limite");
   assert.match(bloq.erro, /até 3 fichas/);
 });
+
+/* ---------------- pagamento online (Asaas simulado) ---------------- */
+// Um Asaas de mentira, em memória, com as rotas que o app usa.
+function asaasFalso() {
+  const st = { clientes: {}, cobrancas: {}, assinaturas: {}, n: 0, semChave: 0 };
+  const http = require("node:http");
+  const srv = http.createServer((req, res) => {
+    let corpo = "";
+    req.on("data", (c) => { corpo += c; });
+    req.on("end", () => {
+      const j = corpo ? JSON.parse(corpo) : {};
+      const ok = (d, s = 200) => { res.writeHead(s, { "Content-Type": "application/json" }); res.end(JSON.stringify(d)); };
+      if (req.headers.access_token !== "chave-teste") { st.semChave++; return ok({ errors: [{ description: "chave inválida" }] }, 401); }
+      const u = req.url.replace(/^\/v3/, "");
+      let m;
+      if (req.method === "POST" && u === "/customers") { const id = `cus_${++st.n}`; st.clientes[id] = { id, ...j }; return ok(st.clientes[id]); }
+      if (req.method === "PUT" && (m = /^\/customers\/(\w+)$/.exec(u))) { Object.assign(st.clientes[m[1]], j); return ok(st.clientes[m[1]]); }
+      if (req.method === "POST" && u === "/payments") { const id = `pay_${++st.n}`; st.cobrancas[id] = { id, status: "PENDING", invoiceUrl: `https://sandbox.asaas.com/i/${id}`, ...j }; return ok(st.cobrancas[id]); }
+      if (req.method === "GET" && (m = /^\/payments\/(\w+)\/pixQrCode$/.exec(u))) return ok({ encodedImage: "iVBORw0KGgo=", payload: `00020126PIX${m[1]}`, expirationDate: "2030-01-01 23:59:59" });
+      if (req.method === "GET" && (m = /^\/payments\/(\w+)$/.exec(u))) return st.cobrancas[m[1]] ? ok(st.cobrancas[m[1]]) : ok({ errors: [{ description: "não encontrada" }] }, 404);
+      if (req.method === "POST" && u === "/subscriptions") { const id = `sub_${++st.n}`; st.assinaturas[id] = { id, ...j }; return ok(st.assinaturas[id]); }
+      if (req.method === "DELETE" && (m = /^\/subscriptions\/(\w+)$/.exec(u))) { st.assinaturas[m[1]].deleted = true; return ok({ deleted: true, id: m[1] }); }
+      ok({ errors: [{ description: "rota desconhecida" }] }, 404);
+    });
+  });
+  return { st, srv };
+}
+
+test("pagamento pelo app: Pix do 1º mês, aviso do Asaas, assinatura, renovação, tolerância, anual e estorno", async () => {
+  const { st, srv } = asaasFalso();
+  await new Promise((r) => srv.listen(0, r));
+  Object.assign(process.env, { ASAAS_API_KEY: "chave-teste", ASAAS_WEBHOOK_TOKEN: "token-webhook-teste", ASAAS_URL: `http://127.0.0.1:${srv.address().port}/v3` });
+  const aviso = (id, token = "token-webhook-teste") => fetch(base + "/api/webhooks/asaas", { method: "POST", headers: { "Content-Type": "application/json", "asaas-access-token": token }, body: JSON.stringify({ event: "PAYMENT_CONFIRMED", payment: { id } }) });
+  try {
+    assert.equal((await cliente()("GET", "/api/config")).body.pagamentoOnline, true);
+    const { c, id } = await novoUsuario("pix@x.com");
+    // validações
+    assert.equal((await c("POST", "/api/assinatura/checkout", { plano: "mensal", forma: "pix", nome: "Maria Souza", cpfCnpj: "111.111.111-11" })).status, 400);
+    const ck = await c("POST", "/api/assinatura/checkout", { plano: "mensal", forma: "pix", nome: "Maria Souza", cpfCnpj: "529.982.247-25" });
+    assert.equal(ck.status, 201, JSON.stringify(ck.body));
+    assert.equal(ck.body.pagamento.valor, 10, "1º mês com a oferta");
+    assert.ok(ck.body.pix.copiaECola && ck.body.pix.imagem);
+    const pagId = ck.body.pagamento.asaasId;
+    assert.equal(st.cobrancas[pagId].billingType, "PIX");
+    assert.equal(st.cobrancas[pagId].externalReference, `u${id}:mensal1`);
+    // clicar de novo reaproveita a mesma cobrança
+    assert.equal((await c("POST", "/api/assinatura/checkout", { plano: "mensal", forma: "pix", nome: "Maria Souza", cpfCnpj: "52998224725" })).body.pagamento.asaasId, pagId);
+    // aviso sem token é recusado; aviso de cobrança ainda não paga não libera nada
+    assert.equal((await aviso(pagId, "errado")).status, 401);
+    assert.equal((await aviso(pagId)).status, 200);
+    assert.equal((await c("GET", "/api/me")).body.user.plano, "free", "o app confere no Asaas antes de liberar");
+
+    // Pix caiu
+    st.cobrancas[pagId].status = "RECEIVED";
+    assert.equal((await aviso(pagId)).status, 200);
+    let me = (await c("GET", "/api/me")).body.user;
+    assert.equal(me.plano, "pro");
+    assert.equal(me.planoTipo, "mensal");
+    assert.equal(me.assinaturaOnline, true);
+    assert.equal(me.oferta.disponivel, false);
+    const ate1 = me.proAte;
+    assert.equal(Math.round((Date.parse(ate1) - Date.now()) / 864e5), 30);
+    // assinatura mensal de R$ 25 criada para o fim do período
+    const subs = Object.values(st.assinaturas);
+    assert.equal(subs.length, 1);
+    assert.deepEqual([subs[0].value, subs[0].cycle, subs[0].billingType, subs[0].externalReference], [25, "MONTHLY", "PIX", `u${id}:mensal`]);
+    assert.equal(subs[0].nextDueDate, new Date(Date.parse(ate1) - 3 * 3600e3).toISOString().slice(0, 10));
+    // aviso repetido não estende de novo
+    await aviso(pagId);
+    assert.equal((await c("GET", "/api/me")).body.user.proAte, ate1);
+    let pags = (await c("GET", "/api/assinatura")).body.pagamentos;
+    assert.deepEqual(pags.map((p) => [p.status, p.valor, p.tipo, p.forma]), [["aprovado", 10, "mensal1", "pix"]]);
+    // não deixa assinar o mensal duas vezes
+    assert.equal((await c("POST", "/api/assinatura/checkout", { plano: "mensal", forma: "pix", nome: "Maria", cpfCnpj: "52998224725" })).status, 409);
+
+    // renovação gerada pela assinatura: chega só pelo aviso
+    st.cobrancas.pay_ren = { id: "pay_ren", subscription: subs[0].id, customer: subs[0].customer, externalReference: `u${id}:mensal`, value: 25, billingType: "PIX", dueDate: subs[0].nextDueDate, status: "RECEIVED", invoiceUrl: "https://sandbox.asaas.com/i/pay_ren" };
+    await aviso("pay_ren");
+    me = (await c("GET", "/api/me")).body.user;
+    assert.ok(Date.parse(me.proAte) - Date.parse(ate1) > 27 * 864e5, "renovação soma um mês a partir do vencimento");
+    pags = (await c("GET", "/api/assinatura")).body.pagamentos;
+    assert.equal(pags.length, 2);
+    assert.equal(pags[0].tipo, "mensal");
+
+    // tolerância de 3 dias com assinatura ativa
+    await run("UPDATE users SET pro_ate = $1 WHERE id = $2", new Date(Date.now() - 864e5).toISOString(), id);
+    me = (await c("GET", "/api/me")).body.user;
+    assert.equal(me.plano, "pro"); assert.equal(me.emTolerancia, true);
+    await run("UPDATE users SET pro_ate = $1 WHERE id = $2", new Date(Date.now() - 4 * 864e5).toISOString(), id);
+    assert.equal((await c("GET", "/api/me")).body.user.plano, "free");
+    // cancelar a renovação: tira a assinatura no Asaas e encerra a tolerância
+    await run("UPDATE users SET pro_ate = $1 WHERE id = $2", new Date(Date.now() + 10 * 864e5).toISOString(), id);
+    const can = await c("POST", "/api/assinatura/cancelar");
+    assert.equal(can.status, 200);
+    assert.equal(st.assinaturas[subs[0].id].deleted, true);
+    assert.equal(can.body.user.assinaturaOnline, false);
+    assert.equal(can.body.user.plano, "pro", "continua Pro até o fim do período pago");
+
+    // anual no cartão: R$ 199 mesmo com a oferta disponível, sem assinatura mensal
+    const u2 = await novoUsuario("anual@x.com");
+    const ca = await u2.c("POST", "/api/assinatura/checkout", { plano: "anual", forma: "cartao", nome: "Joana Lima", cpfCnpj: "11.222.333/0001-81" });
+    assert.equal(ca.status, 201, JSON.stringify(ca.body));
+    assert.equal(ca.body.pagamento.valor, 199);
+    assert.ok(ca.body.pagamento.link.startsWith("https://"));
+    assert.equal(ca.body.pix, undefined);
+    assert.equal(st.cobrancas[ca.body.pagamento.asaasId].billingType, "CREDIT_CARD");
+    st.cobrancas[ca.body.pagamento.asaasId].status = "CONFIRMED";
+    const conf = await u2.c("POST", `/api/assinatura/conferir/${ca.body.pagamento.asaasId}`);
+    assert.equal(conf.status, 200);
+    assert.equal(conf.body.user.planoTipo, "anual");
+    assert.equal(Math.round((Date.parse(conf.body.user.proAte) - Date.now()) / 864e5), 365);
+    assert.equal(conf.body.user.assinaturaOnline, false);
+    assert.equal(Object.values(st.assinaturas).length, 1, "anual não cria assinatura mensal");
+    // outro usuário não confere cobrança alheia
+    assert.equal((await c("POST", `/api/assinatura/conferir/${ca.body.pagamento.asaasId}`)).status, 404);
+
+    // estorno: marca no pagamento e avisa o admin, sem tirar o Pro sozinho
+    st.cobrancas[ca.body.pagamento.asaasId].status = "REFUNDED";
+    await aviso(ca.body.pagamento.asaasId);
+    const a = cliente();
+    await a("POST", "/api/auth/login", { email: "admin@teste.com", senha: "admin-senha-123" });
+    const det = (await a("GET", `/api/admin/usuarios/${u2.id}`)).body;
+    assert.equal(det.pagamentos[0].status, "estornado");
+    assert.ok(det.log.some((l) => l.acao === "estorno"));
+    assert.equal(det.usuario.planoTipo, "anual");
+    // MRR conta o anual como 199/12
+    const r = (await a("GET", "/api/admin/resumo")).body;
+    const pros = (await a("GET", "/api/admin/usuarios?filtro=pro")).body.usuarios;
+    const esperado = pros.reduce((t, x) => t + (x.planoTipo === "anual" ? 199 / 12 : 25), 0);
+    assert.ok(Math.abs(r.mrr - esperado) < 0.01, `${r.mrr} vs ${esperado}`);
+    // "+1 ano" no admin sugere R$ 199, sem somar a oferta
+    const u3 = await novoUsuario("ano-admin@x.com");
+    const prev = (await a("POST", `/api/admin/usuarios/${u3.id}/pro/previa`, { dias: 365 })).body;
+    assert.equal(prev.valor, 199);
+    assert.equal(prev.comOferta, false);
+    assert.equal(st.semChave, 0, "toda chamada ao Asaas leva a chave");
+  } finally {
+    delete process.env.ASAAS_API_KEY; delete process.env.ASAAS_WEBHOOK_TOKEN; delete process.env.ASAAS_URL;
+    srv.close();
+  }
+});

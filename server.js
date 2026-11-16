@@ -8,6 +8,7 @@ const { get, all, run, tx, now, ready } = require("./lib/db");
 const auth = require("./lib/auth");
 const planos = require("./lib/planos");
 const notif = require("./lib/notificacoes");
+const asaas = require("./lib/asaas");
 const Calc = require("./public/calc");
 
 const app = express();
@@ -59,6 +60,17 @@ async function garantirAdmin() {
 app.get("/api/health", h(async (req, res) => { await ready(); await get("SELECT 1 AS ok"); res.json({ ok: true }); }));
 
 app.use("/api", h(async (req, res, next) => { await iniciar(); next(); }));
+// Aviso de pagamento do Asaas. Vem de fora do app (sem o cabeçalho do front), por isso fica antes da proteção CSRF;
+// é aceito só com o token configurado no webhook do Asaas, e a cobrança é conferida na API antes de liberar o Pro.
+app.post("/api/webhooks/asaas", h(async (req, res) => {
+  const esperado = asaas.tokenWebhook(), recebido = String(req.get("asaas-access-token") || "");
+  if (!asaas.ativo() || !esperado || recebido.length !== esperado.length || !crypto.timingSafeEqual(Buffer.from(recebido), Buffer.from(esperado)))
+    return erro(res, 401, "Não autorizado.");
+  const id = req.body && req.body.payment && req.body.payment.id;
+  if (id) await aplicarCobranca(await asaas.buscarCobranca(id));
+  res.json({ ok: true });
+}));
+
 // Proteção CSRF: toda escrita na API precisa do cabeçalho enviado pelo nosso front (o cron é GET).
 // Também recusa escritas vindas de outro site (cabeçalho Origin diferente do próprio app).
 app.use("/api", (req, res, next) => {
@@ -194,7 +206,8 @@ app.post("/api/auth/redefinir", h(async (req, res) => {
 // Dados públicos para a tela de login (nome do app e WhatsApp do suporte).
 app.get("/api/config", (req, res) => {
   res.json({ appName: notif.APP_NAME, suporteWhatsApp: notif.SUPORTE_WHATSAPP, preco: planos.PRECO_PRO, precoOferta: planos.PRECO_OFERTA, diasOferta: planos.DIAS_OFERTA,
-    limitesFree: { insumos: planos.LIMITES.free.insumos, receitas: planos.LIMITES.free.receitas } });
+    limitesFree: { insumos: planos.LIMITES.free.insumos, receitas: planos.LIMITES.free.receitas },
+    precoAnual: planos.PRECO_ANUAL, pagamentoOnline: asaas.ativo() });
 });
 
 app.get("/api/me", h(async (req, res) => {
@@ -440,12 +453,167 @@ app.post("/api/notificacoes/lidas", auth.exigirLogin, h(async (req, res) => {
 }));
 
 /* ---------------- assinatura ---------------- */
+const SQL_PAGAMENTOS = `SELECT id, valor, status, provider, dias, forma, tipo, link, asaas_id AS "asaasId", criado_em AS "criadoEm", aprovado_em AS "aprovadoEm"
+  FROM pagamentos WHERE user_id = $1 ORDER BY id DESC LIMIT 50`;
 app.get("/api/assinatura", auth.exigirLogin, h(async (req, res) => {
-  res.json({
-    pagamentos: await all(`SELECT id, valor, status, provider, dias, criado_em AS "criadoEm", aprovado_em AS "aprovadoEm" FROM pagamentos WHERE user_id = $1 ORDER BY id DESC LIMIT 50`, req.user.id),
-    suporteWhatsApp: notif.SUPORTE_WHATSAPP,
-  });
+  res.json({ pagamentos: await all(SQL_PAGAMENTOS, req.user.id), suporteWhatsApp: notif.SUPORTE_WHATSAPP, pagamentoOnline: asaas.ativo() });
 }));
+
+/* ---------------- pagamento online (Asaas) ---------------- */
+// Primeiro período: cobrança avulsa (R$ 10 da oferta ou R$ 25 no mensal; R$ 199 no anual).
+// Quando o mensal é pago, o app cria a assinatura de R$ 25 com vencimento no fim do período,
+// e cada renovação paga estende o Pro por mais um mês. O anual não renova sozinho.
+const hojeBR = () => new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10);
+const FORMAS = { pix: "PIX", cartao: "CREDIT_CARD" };
+const formaDe = (billingType) => (billingType === "PIX" ? "pix" : billingType === "CREDIT_CARD" ? "cartao" : String(billingType || "").toLowerCase());
+function cpfCnpjValido(v) {
+  const d = String(v || "").replace(/\D/g, "");
+  if (/^(\d)\1+$/.test(d)) return false;
+  const dv = (base, pesos) => { const s = base.split("").reduce((t, n, i) => t + Number(n) * pesos[i], 0) % 11; return s < 2 ? 0 : 11 - s; };
+  if (d.length === 11) {
+    const p1 = [10, 9, 8, 7, 6, 5, 4, 3, 2], p2 = [11, 10, 9, 8, 7, 6, 5, 4, 3, 2];
+    return dv(d.slice(0, 9), p1) === Number(d[9]) && dv(d.slice(0, 10), p2) === Number(d[10]);
+  }
+  if (d.length === 14) {
+    const p1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2], p2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+    return dv(d.slice(0, 12), p1) === Number(d[12]) && dv(d.slice(0, 13), p2) === Number(d[13]);
+  }
+  return false;
+}
+// Fim do dia (horário de Brasília) de uma data AAAA-MM-DD, somando meses.
+function fimDoDiaMaisMeses(aaaammdd, meses) {
+  const [a, m, d] = aaaammdd.split("-").map(Number);
+  const data = new Date(Date.UTC(a, m - 1 + meses, 1));
+  const ultimo = new Date(Date.UTC(data.getUTCFullYear(), data.getUTCMonth() + 1, 0)).getUTCDate();
+  data.setUTCDate(Math.min(d, ultimo));
+  return new Date(`${data.toISOString().slice(0, 10)}T23:59:59-03:00`).toISOString();
+}
+const erroAsaas = (res, e) => {
+  console.error("[asaas]", e.status || "", e.message);
+  return erro(res, 502, e instanceof asaas.ErroAsaas && e.status < 500 ? e.message : "Não foi possível falar com o sistema de pagamento agora. Tente de novo em instantes ou fale com o suporte no WhatsApp.");
+};
+
+app.post("/api/assinatura/checkout", auth.exigirLogin, h(async (req, res) => {
+  if (!asaas.ativo()) return erro(res, 404, "O pagamento pelo app ainda não está disponível. Assine pelo WhatsApp do suporte.");
+  const u = req.user;
+  const plano = req.body.plano === "anual" ? "anual" : "mensal";
+  const forma = req.body.forma === "cartao" ? "cartao" : "pix";
+  const nome = txt(req.body.nome, 100), cpfCnpj = soDigitos(req.body.cpfCnpj);
+  if (nome.length < 2) return erro(res, 400, "Informe o nome que vai aparecer na cobrança.");
+  if (!cpfCnpjValido(cpfCnpj)) return erro(res, 400, "Informe um CPF ou CNPJ válido. O sistema de pagamento exige.");
+  if (plano === "mensal" && u.asaas_assinatura_id) return erro(res, 409, "Você já tem a assinatura mensal ativa. A renovação é cobrada sozinha todo mês.");
+  await marcar(u.id, "assinar_em");
+  const tipo = plano === "anual" ? "anual" : "mensal1";
+  const valor = plano === "anual" ? planos.PRECO_ANUAL : planos.ofertaDisponivel(u) ? planos.PRECO_OFERTA : planos.PRECO_PRO;
+  const dias = plano === "anual" ? 365 : 30;
+  try {
+    // Reaproveita uma cobrança igual ainda em aberto (evita gerar vários Pix para o mesmo clique).
+    let pag = await get(`SELECT * FROM pagamentos WHERE user_id = $1 AND provider = 'asaas' AND status = 'pendente' AND tipo = $2 AND forma = $3 AND valor = $4 AND criado_em > $5 ORDER BY id DESC LIMIT 1`,
+      u.id, tipo, forma, valor, new Date(Date.now() - 864e5).toISOString());
+    if (!pag) {
+      const dadosCliente = { name: nome, cpfCnpj, email: u.email, mobilePhone: u.telefone, externalReference: `u${u.id}` };
+      let cliente = u.asaas_cliente_id;
+      if (cliente) await asaas.atualizarCliente(cliente, dadosCliente);
+      else {
+        cliente = (await asaas.criarCliente(dadosCliente)).id;
+        await run("UPDATE users SET asaas_cliente_id = $1 WHERE id = $2", cliente, u.id);
+      }
+      const cob = await asaas.criarCobranca({
+        customer: cliente, billingType: FORMAS[forma], value: valor, dueDate: hojeBR(), externalReference: `u${u.id}:${tipo}`,
+        description: plano === "anual" ? `${notif.APP_NAME} Pro anual (12 meses)` : `${notif.APP_NAME} Pro: primeiro mês`,
+      });
+      pag = await get(`INSERT INTO pagamentos (user_id, valor, status, provider, dias, criado_em, asaas_id, forma, tipo, link)
+        VALUES ($1,$2,'pendente','asaas',$3,$4,$5,$6,$7,$8) RETURNING *`, u.id, valor, dias, now(), cob.id, forma, tipo, cob.invoiceUrl || null);
+    }
+    const out = { pagamento: { asaasId: pag.asaas_id, valor: pag.valor, forma, plano, link: pag.link } };
+    if (forma === "pix") {
+      const pix = await asaas.pixDaCobranca(pag.asaas_id);
+      out.pix = { copiaECola: pix.payload, imagem: pix.encodedImage, expiraEm: pix.expirationDate || null };
+    }
+    res.status(201).json(out);
+  } catch (e) { return erroAsaas(res, e); }
+}));
+
+// "Já paguei": confere a cobrança no Asaas na hora (útil se o aviso automático atrasar).
+app.post("/api/assinatura/conferir/:asaasId", auth.exigirLogin, h(async (req, res) => {
+  if (!asaas.ativo()) return erro(res, 404, "Pagamento online indisponível.");
+  const pag = await get("SELECT * FROM pagamentos WHERE asaas_id = $1 AND user_id = $2", String(req.params.asaasId), req.user.id);
+  if (!pag) return erro(res, 404, "Cobrança não encontrada.");
+  try { await aplicarCobranca(await asaas.buscarCobranca(pag.asaas_id)); } catch (e) { return erroAsaas(res, e); }
+  const atual = await get("SELECT * FROM users WHERE id = $1", req.user.id);
+  const status = (await get("SELECT status FROM pagamentos WHERE id = $1", pag.id)).status;
+  res.json({ status, user: await userOut(atual) });
+}));
+
+// Cancela a renovação automática. O Pro continua até o fim do período já pago.
+app.post("/api/assinatura/cancelar", auth.exigirLogin, h(async (req, res) => {
+  const u = req.user;
+  if (!u.asaas_assinatura_id) return erro(res, 400, "Não há assinatura com renovação automática nesta conta.");
+  try { await asaas.cancelarAssinatura(u.asaas_assinatura_id); }
+  catch (e) { if (!(e instanceof asaas.ErroAsaas && e.status === 404)) return erroAsaas(res, e); }
+  await run("UPDATE users SET asaas_assinatura_id = NULL WHERE id = $1", u.id);
+  await notif.notificar(u.id, "Renovação cancelada", `A renovação automática foi cancelada. Seu Pro continua até ${new Date(u.pro_ate).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}, e nada é apagado depois disso.`, { tipo: "sistema" });
+  res.json({ ok: true, user: await userOut(await get("SELECT * FROM users WHERE id = $1", u.id)) });
+}));
+
+// Aplica uma cobrança do Asaas (sempre lida da API, nunca só do corpo do aviso). Pode ser chamada várias vezes:
+// a liberação do Pro acontece uma única vez por cobrança.
+async function aplicarCobranca(c) {
+  if (!c || !c.id) return null;
+  const ref = /^u(\d+):(mensal1|mensal|anual)$/.exec(String(c.externalReference || ""));
+  let u = ref ? await get("SELECT * FROM users WHERE id = $1", Number(ref[1])) : null;
+  if (!u && c.subscription) u = await get("SELECT * FROM users WHERE asaas_assinatura_id = $1", c.subscription);
+  if (!u && c.customer) u = await get("SELECT * FROM users WHERE asaas_cliente_id = $1", c.customer);
+  if (!u) { console.warn(`[asaas] cobrança ${c.id} sem usuário correspondente`); return null; }
+  const tipo = ref ? ref[2] : c.subscription ? "mensal" : "mensal1";
+  const dias = tipo === "anual" ? 365 : 30;
+  const forma = formaDe(c.billingType);
+  // Garante a linha da cobrança (renovações da assinatura chegam aqui pela primeira vez).
+  await run(`INSERT INTO pagamentos (user_id, valor, status, provider, dias, criado_em, asaas_id, forma, tipo, link)
+    VALUES ($1,$2,'pendente','asaas',$3,$4,$5,$6,$7,$8) ON CONFLICT (asaas_id) DO NOTHING`, u.id, Number(c.value) || 0, dias, now(), c.id, forma, tipo, c.invoiceUrl || null);
+
+  if (asaas.PAGO.has(c.status)) {
+    // Marca como aprovada só se ainda não estava: é isso que impede liberar duas vezes.
+    const novo = await get("UPDATE pagamentos SET status = 'aprovado', aprovado_em = $1, valor = $2 WHERE asaas_id = $3 AND status <> 'aprovado' RETURNING id",
+      now(), Number(c.value) || 0, c.id);
+    if (!novo) return "repetido";
+    let ate;
+    if (tipo === "mensal" && c.dueDate) {
+      // Renovação: vale até um mês depois do vencimento da cobrança (sem encurtar o que já estava pago).
+      ate = fimDoDiaMaisMeses(c.dueDate, 1);
+      if (u.pro_ate && Date.parse(u.pro_ate) > Date.parse(ate)) ate = u.pro_ate;
+      await planos.definirProAte(u.id, ate);
+    } else ate = await planos.estenderPro(u.id, dias);
+    await run("UPDATE users SET plano_tipo = $1 WHERE id = $2", tipo === "anual" ? "anual" : "mensal", u.id);
+    // 1º mês pago: cria a assinatura de R$ 25 com a primeira renovação no fim do período.
+    if (tipo === "mensal1" && !u.asaas_assinatura_id && u.asaas_cliente_id) {
+      try {
+        const ass = await asaas.criarAssinatura({
+          customer: u.asaas_cliente_id, billingType: c.billingType === "CREDIT_CARD" ? "CREDIT_CARD" : "PIX", value: planos.PRECO_PRO,
+          nextDueDate: new Date(Date.parse(ate) - 3 * 3600e3).toISOString().slice(0, 10), cycle: "MONTHLY",
+          description: `${notif.APP_NAME} Pro mensal`, externalReference: `u${u.id}:mensal`,
+        });
+        await run("UPDATE users SET asaas_assinatura_id = $1 WHERE id = $2", ass.id, u.id);
+      } catch (e) {
+        console.error("[asaas] falha ao criar a assinatura:", e.message);
+        await run("INSERT INTO admin_log (admin_id, user_id, acao, detalhe, criado_em) VALUES (NULL,$1,$2,$3,$4)", u.id, "asaas", `Pro liberado, mas a assinatura mensal não foi criada: ${e.message}`, now());
+      }
+    }
+    const dataBR = new Date(ate).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+    await notif.notificar(u.id, "Pagamento confirmado", `Recebemos seu pagamento de R$ ${Number(c.value).toFixed(2).replace(".", ",")}. Seu plano Pro está ativo até ${dataBR}.`, { tipo: "sistema", email: true });
+    await run("INSERT INTO admin_log (admin_id, user_id, acao, detalhe, criado_em) VALUES (NULL,$1,$2,$3,$4)", u.id, "pro", `pago pelo Asaas (${forma}) · até ${ate.slice(0, 10)}`, now());
+    return "aprovado";
+  }
+  if (asaas.DEVOLVIDO.has(c.status)) {
+    const r = await get("UPDATE pagamentos SET status = 'estornado' WHERE asaas_id = $1 AND status <> 'estornado' RETURNING id", c.id);
+    // O Pro não é retirado sozinho: o admin vê o estorno no painel e decide.
+    if (r) await run("INSERT INTO admin_log (admin_id, user_id, acao, detalhe, criado_em) VALUES (NULL,$1,$2,$3,$4)", u.id, "estorno", `cobrança ${c.id} estornada ou contestada (${c.status})`, now());
+    return "estornado";
+  }
+  if (c.status === "OVERDUE") await run("UPDATE pagamentos SET status = 'vencido' WHERE asaas_id = $1 AND status = 'pendente'", c.id);
+  if (c.deleted) await run("UPDATE pagamentos SET status = 'cancelado' WHERE asaas_id = $1 AND status IN ('pendente','vencido')", c.id);
+  return "pendente";
+}
 
 /* ---------------- tarefa diária (Vercel Cron) ---------------- */
 // A Vercel chama esta rota uma vez por dia (vercel.json) com "Authorization: Bearer CRON_SECRET".
@@ -470,7 +638,7 @@ const logAdmin = (req, userId, acao, detalhe = "") =>
   run("INSERT INTO admin_log (admin_id, user_id, acao, detalhe, criado_em) VALUES ($1,$2,$3,$4,$5)", req.user.id, userId, acao, detalhe, now());
 
 const SQL_USUARIOS = `SELECT u.id, u.nome, u.email, u.telefone, u.role, u.plano, u.pro_ate, u.status, u.motivo_bloqueio, u.criado_em, u.ultimo_acesso, u.oferta_usada,
-  u.origem, u.ficha_completa_em, u.limite_em, u.assinar_em,
+  u.origem, u.ficha_completa_em, u.limite_em, u.assinar_em, u.plano_tipo, u.asaas_assinatura_id,
   (SELECT COUNT(*) FROM pagamentos p WHERE p.user_id = u.id AND p.status IN ('aprovado','manual'))::int AS n_pagamentos,
   (SELECT COUNT(*) FROM insumos i WHERE i.user_id = u.id)::int AS n_insumos,
   (SELECT COUNT(*) FROM receitas r WHERE r.user_id = u.id)::int AS n_receitas,
@@ -485,6 +653,7 @@ function adminUserOut(u) {
     ofertaDisponivel: planos.ofertaDisponivel(u),
     origem: u.origem || null, fichaCompletaEm: u.ficha_completa_em || null, limiteEm: u.limite_em || null, assinarEm: u.assinar_em || null,
     jaFoiPro: !!u.pro_ate, pagamentos: u.n_pagamentos || 0,
+    planoTipo: ativoPro ? u.plano_tipo || "mensal" : null, assinaturaOnline: !!u.asaas_assinatura_id,
   };
 }
 // Listas de contato do funil.
@@ -557,7 +726,10 @@ admin.get("/resumo", h(async (req, res) => {
     novos30: us.filter((u) => Date.parse(u.criadoEm) > d30).length,
     vencendo7: pro.filter((u) => u.diasRestantes <= 7).length,
     vencidos: us.filter((u) => u.vencido).length,
-    mrr: pro.length * planos.PRECO_PRO,
+    // Receita recorrente mensal: o anual conta como R$ 199/12.
+    mrr: Math.round(pro.reduce((t, u) => t + (u.planoTipo === "anual" ? planos.PRECO_ANUAL / 12 : planos.PRECO_PRO), 0) * 100) / 100,
+    precoAnual: planos.PRECO_ANUAL,
+    pagamentoOnline: asaas.ativo(),
     receita30,
     cadastrosPorDia: Object.entries(porDia).map(([dia, n]) => ({ dia, n })),
     origens: origensDe(us),
@@ -595,7 +767,7 @@ admin.get("/usuarios/:id", h(async (req, res) => {
   if (!u) return erro(res, 404, "Usuário não encontrado.");
   res.json({
     usuario: adminUserOut(u),
-    pagamentos: await all(`SELECT id, valor, status, provider, dias, criado_em AS "criadoEm", aprovado_em AS "aprovadoEm" FROM pagamentos WHERE user_id = $1 ORDER BY id DESC LIMIT 50`, u.id),
+    pagamentos: await all(SQL_PAGAMENTOS, u.id),
     notificacoes: await all(`SELECT id, titulo, tipo, lida, criado_em AS "criadoEm" FROM notificacoes WHERE user_id = $1 ORDER BY id DESC LIMIT 30`, u.id),
     log: await all(`SELECT acao, detalhe, criado_em AS "criadoEm" FROM admin_log WHERE user_id = $1 ORDER BY id DESC LIMIT 30`, u.id),
   });
@@ -656,6 +828,7 @@ admin.post("/usuarios/:id/pro", h(async (req, res) => {
   if (req.body.registrarPagamento && !(valor >= 0 && valor <= 1e6)) return erro(res, 400, "Informe um valor válido, por exemplo 25,00.");
   let ate;
   if (c.modo === "data") { ate = c.ate; await planos.definirProAte(u.id, ate); } else ate = await planos.estenderPro(u.id, c.dias);
+  await run("UPDATE users SET plano_tipo = $1 WHERE id = $2", c.dias >= 365 ? "anual" : "mensal", u.id);
   if (req.body.registrarPagamento) await run("INSERT INTO pagamentos (user_id, valor, status, provider, dias, criado_em, aprovado_em) VALUES ($1,$2,$3,$4,$5,$6,$7)",
     u.id, Math.round(valor * 100) / 100, "manual", c.comOferta ? "whatsapp-oferta" : "whatsapp", Math.max(1, c.dias), now(), now());
   await logAdmin(req, u.id, "pro", `até ${ate.slice(0, 10)}${req.body.registrarPagamento ? ` · pagamento ${valor.toFixed(2).replace(".", ",")}` : ""}`);
